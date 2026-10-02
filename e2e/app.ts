@@ -104,4 +104,18 @@ export async function restartApp(): Promise<void> {
   }
   // tauri-driver closes the app with the old session and launches it for the new one.
   await browser.reloadSession();
+  // Scripts can time out while the new webview is still loading, so wait for the shell.
+  await browser.waitUntil(
+    async () => {
+      try {
+        return await browser.execute(
+          () =>
+            document.readyState === "complete" && document.body.innerText.includes("Storage OK"),
+        );
+      } catch {
+        return false;
+      }
+    },
+    { timeout: 60_000, timeoutMsg: "MuDraft did not finish loading after the restart" },
+  );
 }
