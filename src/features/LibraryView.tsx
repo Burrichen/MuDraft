@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { usePreferences } from "../app/preferencesContext";
 import { useDebounced } from "../app/useDebounced";
@@ -108,15 +108,18 @@ export function LibraryView({
   // so returning from an album page restores it. Every change is one URL write, which
   // keeps concurrent updates from overwriting each other.
   const [params, setParams] = useSearchParams();
+  // The router hands updaters the params of the last render, so two writes before a
+  // re-render (e.g. a debounced search, then a filter click) would drop the first.
+  // Chain writes through the latest params instead.
+  const latestParams = useRef(params);
+  useLayoutEffect(() => {
+    latestParams.current = params;
+  }, [params]);
   const updateParams = (edit: (p: URLSearchParams) => void) => {
-    setParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        edit(next);
-        return next;
-      },
-      { replace: true },
-    );
+    const next = new URLSearchParams(latestParams.current);
+    edit(next);
+    latestParams.current = next;
+    setParams(next, { replace: true });
   };
   const putList = (p: URLSearchParams, key: string, values: readonly string[]) => {
     p.delete(key);

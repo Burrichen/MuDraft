@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   listLibrary,
@@ -490,6 +490,21 @@ describe("Back navigation", () => {
       "true",
     );
     expect(lastQuery()).toMatchObject({ search: "hom", sort: "title", genres: ["Electronic"] });
+  });
+
+  it("keeps both changes when two arrive before a re-render", async () => {
+    const { router } = renderApp("/listen-list");
+    await screen.findByRole("link", { name: "Homogenic" });
+    const sortBox = screen.getByLabelText("Sort");
+    const electronic = screen.getByRole("button", { name: /^Electronic/ });
+    // One act: both handlers run against the same render, as on a slow machine.
+    act(() => {
+      fireEvent.change(sortBox, { target: { value: "title" } });
+      fireEvent.click(electronic);
+    });
+    const url = new URLSearchParams(router.state.location.search);
+    expect(url.get("sort")).toBe("title");
+    expect(url.getAll("genre")).toEqual(["Electronic"]);
   });
 
   it("renders large lists in pages and remembers how much was shown", async () => {
