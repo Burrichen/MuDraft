@@ -1,9 +1,9 @@
-# Release blockers (audit, 2026-10-02)
+# Release blockers (updated for 1.0.0, 2026-10-02)
 
 ## Open — must resolve before a public release
 
-1. **Signing**: no macOS Developer ID/notarization or Windows Authenticode yet (packaging step).
-2. **Windows/Linux native E2E not run**: the journey passes on macOS (embedded WebDriver). The CI `e2e` job (macOS) and Windows runs are unverified until pushed.
+1. **Signing**: Windows 1.0.0 is an unsigned personal release (SmartScreen may warn). CI signs when `WINDOWS_CERTIFICATE` secrets exist. There is no macOS Developer ID/notarization and no macOS distribution yet.
+2. **WebView2 offline install path**: bundled, but not exercised in CI, because runners already have WebView2. Test on a clean Windows VM.
 3. **Manual assistive-technology pass**: VoiceOver/NVDA walkthrough not done. Automated axe-core and keyboard sweeps are clean except item 4.
 4. **Card title target size**: axe flags the title link (18 px). The real target is the whole card (`::after` cover link), so it is likely a false positive. Confirm in the manual pass.
 

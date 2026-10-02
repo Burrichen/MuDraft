@@ -26,7 +26,7 @@
     "check": "npm run check:web && npm run check:rust",
     "e2e:build": "tauri build --debug --no-bundle --features e2e",
     "e2e": "wdio run e2e/wdio.conf.ts",
-    "check:isolation": "cd src-tauri && ! cargo tree -e normal -i tauri-plugin-wdio-webdriver >/dev/null 2>&1"
+    "check:isolation": "node scripts/check-isolation.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",

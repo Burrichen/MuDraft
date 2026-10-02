@@ -2,27 +2,27 @@
 
 ## Completed steps
 
-- **Foundation → Profile export/restore**: Tauri 2.12/React 19/TS 6/Vite 8 (Node 24.21.0, npm 11.19.0, Rust 1.97.1); schema v1–v10; every product feature in spec §§1–7.
-- **Audit and hardening (latest)**:
-  - Native E2E: WebdriverIO 9.32 in standalone mode against the real binary built with cargo feature `e2e`. That feature embeds `tauri-plugin-wdio-webdriver`, MusicBrainz fixtures and dialog overrides; `check:isolation` keeps them out of normal builds.
-  - Rust journey test from CSV to restore, plus a large-library measurement test.
-  - Fixes: artwork image checks on restore and serve, back-navigation state kept in the URL, paged card rendering, link target size, focusable Stats table.
-  - `docs/RELEASE_BLOCKERS.md` holds the blocker list and measurements.
+- **Foundation → Audit**: Tauri 2.12/React 19/TS 6/Vite 8 (Node 24.21.0, Rust 1.97.1); schema v1–v11; spec §§1–7; native WebdriverIO E2E behind the test-only `e2e` feature (`check:isolation`).
+- **Windows release 1.0.0 (latest)**:
+  - Colour correction (spec §1): charcoal/grey tokens, blue accents only, neutral selected surfaces and placeholders, charcoal icon. Listen ASAP defaults to mustard (v11 keeps chosen colours).
+  - NSIS per-user installer `MuDraft_<version>_windows_x64_setup.exe` with offline WebView2 (~127 MB). Signing is optional via CI secrets (`docs/WINDOWS.md`).
+  - `Windows release` workflow builds the installer on `windows-latest` and runs `scripts/windows/verify-install.ps1`. On a `v*` tag it publishes the release.
 
-## Checks run (macOS 26.6.2)
+## Checks run
 
-- `npm run check`: 182 web tests; clippy clean (also with `--features e2e`); 199 Rust tests.
-- `npm run e2e`: 10/10 native journey steps, three consecutive runs.
-- Sweep of 9 screens × 4 sizes/zooms: no overflow; focus visible; axe-core clean except a likely false positive (blocker 4).
+- macOS 26.6.2: `npm run check` (197 web, 200 Rust), `npm run e2e` 10/10, and a 9-screen × 4 size/zoom sweep with axe (no contrast findings).
+- Windows: see PR #1 / release CI results.
 
 ## Unverified
 
-- CI `e2e` job and Windows runs (not pushed); manual screen-reader pass.
+- Theme not inspected on Windows beyond CI screenshots.
+- The WebView2 offline-install path is not exercised, because runners already have WebView2.
+- Manual screen-reader pass.
 
 ## Blockers
 
-See `docs/RELEASE_BLOCKERS.md` (signing, Windows E2E, manual AT pass).
+See `docs/RELEASE_BLOCKERS.md`.
 
 ## Next step
 
-Release packaging, signing status, CI artifacts.
+Signing decision; macOS distribution.
