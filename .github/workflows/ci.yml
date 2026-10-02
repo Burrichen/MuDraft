@@ -104,4 +104,19 @@ jobs:
         run: npm run e2e:build
 
       - name: Run the native journey
+        if: runner.os != 'Windows'
         run: npm run e2e
+
+      # WebView2 150+ ignores msedgedriver's debugging-port argument in elevated
+      # processes, and hosted Windows runners are elevated, so run the journey
+      # de-elevated (the Tauri maintainers' workaround, tauri-apps/wry#1782).
+      - name: Run the native journey (de-elevated)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          winget install gerardog.gsudo --version 2.6.1 --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:PATH = "$env:ProgramFiles\gsudo\Current;$env:PATH"
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          icacls "$env:RUNNER_TEMP" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          gsudo --integrity Medium npm run e2e
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
