@@ -23,8 +23,8 @@ use crate::state::AppState;
 
 pub fn run() {
     let builder = tauri::Builder::default();
-    // Native E2E builds only (`--features e2e`): an embedded WebDriver server.
-    #[cfg(feature = "e2e")]
+    // Native E2E builds only (`--features e2e`): an embedded WebDriver server on macOS.
+    #[cfg(all(feature = "e2e", target_os = "macos"))]
     let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
     builder
         .plugin(tauri_plugin_dialog::init())

@@ -5,7 +5,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { paths, startApp, stopApp, workDir } from "../app";
+import { paths, restartApp, workDir } from "../app";
 
 const work = workDir;
 
@@ -116,9 +116,7 @@ describe("MuDraft native journey", () => {
   });
 
   it("keeps everything after the app restarts", async () => {
-    await stopApp();
-    await startApp();
-    await browser.reloadSession();
+    await restartApp();
     await go("#/collection");
     await waitForText("Homogenic");
     await go("#/listen-list");

@@ -1,10 +1,10 @@
-// Fails if the test-only WebDriver plugin is reachable from a normal build. Also checks
-// that it IS present with `--features e2e`, so a renamed crate can't pass vacuously.
+// Fails if the test-only WebDriver plugin is reachable from a normal build for any target.
+// Also checks that it IS present with `--features e2e`, so a renamed crate can't pass vacuously.
 import { spawnSync } from "node:child_process";
 
 const PLUGIN = "tauri-plugin-wdio-webdriver";
 const tree = (...extra) =>
-  spawnSync("cargo", ["tree", "-e", "normal", "-i", PLUGIN, ...extra], {
+  spawnSync("cargo", ["tree", "--target", "all", "-e", "normal", "-i", PLUGIN, ...extra], {
     cwd: new URL("../src-tauri/", import.meta.url),
     encoding: "utf8",
   });
