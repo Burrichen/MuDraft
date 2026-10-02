@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-csv-import-apply-mapping"
+description = "Enables the csv_import_apply_mapping command without any pre-configured scope."
+commands.allow = ["csv_import_apply_mapping"]
+
+[[permission]]
+identifier = "deny-csv-import-apply-mapping"
+description = "Denies the csv_import_apply_mapping command without any pre-configured scope."
+commands.deny = ["csv_import_apply_mapping"]

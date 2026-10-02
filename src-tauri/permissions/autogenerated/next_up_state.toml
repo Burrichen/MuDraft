@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-next-up-state"
+description = "Enables the next_up_state command without any pre-configured scope."
+commands.allow = ["next_up_state"]
+
+[[permission]]
+identifier = "deny-next-up-state"
+description = "Denies the next_up_state command without any pre-configured scope."
+commands.deny = ["next_up_state"]

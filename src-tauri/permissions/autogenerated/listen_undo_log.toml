@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-listen-undo-log"
+description = "Enables the listen_undo_log command without any pre-configured scope."
+commands.allow = ["listen_undo_log"]
+
+[[permission]]
+identifier = "deny-listen-undo-log"
+description = "Denies the listen_undo_log command without any pre-configured scope."
+commands.deny = ["listen_undo_log"]

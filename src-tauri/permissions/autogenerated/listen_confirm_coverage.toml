@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-listen-confirm-coverage"
+description = "Enables the listen_confirm_coverage command without any pre-configured scope."
+commands.allow = ["listen_confirm_coverage"]
+
+[[permission]]
+identifier = "deny-listen-confirm-coverage"
+description = "Denies the listen_confirm_coverage command without any pre-configured scope."
+commands.deny = ["listen_confirm_coverage"]

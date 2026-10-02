@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stats-overview"
+description = "Enables the stats_overview command without any pre-configured scope."
+commands.allow = ["stats_overview"]
+
+[[permission]]
+identifier = "deny-stats-overview"
+description = "Denies the stats_overview command without any pre-configured scope."
+commands.deny = ["stats_overview"]

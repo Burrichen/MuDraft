@@ -1,0 +1,107 @@
+.import-mapping {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+  gap: var(--space-3);
+}
+
+.import-select {
+  min-height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.import-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.import-table caption {
+  text-align: left;
+  padding-bottom: var(--space-2);
+}
+
+.import-table th,
+.import-table td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.import-table th {
+  color: var(--text-muted);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+
+.import-status[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.import-status[data-tone="warn"] {
+  color: var(--warning);
+}
+
+.import-status[data-tone="bad"] {
+  color: var(--danger);
+}
+
+.import-status[data-tone="muted"] {
+  color: var(--text-muted);
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.import-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.import-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.import-tag input {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--accent);
+}
+
+.import-help summary {
+  cursor: pointer;
+  color: var(--accent-text);
+}
+
+.import-help ul {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.import-help code {
+  color: var(--text);
+}
+
+.import-fact {
+  display: contents;
+}
+
+.import-banner,
+.import-footer {
+  margin-bottom: var(--space-4);
+}

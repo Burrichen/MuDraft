@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artwork-fetch-many"
+description = "Enables the artwork_fetch_many command without any pre-configured scope."
+commands.allow = ["artwork_fetch_many"]
+
+[[permission]]
+identifier = "deny-artwork-fetch-many"
+description = "Denies the artwork_fetch_many command without any pre-configured scope."
+commands.deny = ["artwork_fetch_many"]

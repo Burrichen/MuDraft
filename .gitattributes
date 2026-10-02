@@ -1,0 +1,5 @@
+# Keep LF everywhere so prettier/rustfmt checks agree on Windows checkouts.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary

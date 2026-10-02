@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artist-tracklists-load"
+description = "Enables the artist_tracklists_load command without any pre-configured scope."
+commands.allow = ["artist_tracklists_load"]
+
+[[permission]]
+identifier = "deny-artist-tracklists-load"
+description = "Denies the artist_tracklists_load command without any pre-configured scope."
+commands.deny = ["artist_tracklists_load"]

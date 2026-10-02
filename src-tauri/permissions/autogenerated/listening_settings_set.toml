@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-listening-settings-set"
+description = "Enables the listening_settings_set command without any pre-configured scope."
+commands.allow = ["listening_settings_set"]
+
+[[permission]]
+identifier = "deny-listening-settings-set"
+description = "Denies the listening_settings_set command without any pre-configured scope."
+commands.deny = ["listening_settings_set"]

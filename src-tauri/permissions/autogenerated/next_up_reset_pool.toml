@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-next-up-reset-pool"
+description = "Enables the next_up_reset_pool command without any pre-configured scope."
+commands.allow = ["next_up_reset_pool"]
+
+[[permission]]
+identifier = "deny-next-up-reset-pool"
+description = "Denies the next_up_reset_pool command without any pre-configured scope."
+commands.deny = ["next_up_reset_pool"]

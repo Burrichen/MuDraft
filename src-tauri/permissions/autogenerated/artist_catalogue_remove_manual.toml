@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artist-catalogue-remove-manual"
+description = "Enables the artist_catalogue_remove_manual command without any pre-configured scope."
+commands.allow = ["artist_catalogue_remove_manual"]
+
+[[permission]]
+identifier = "deny-artist-catalogue-remove-manual"
+description = "Denies the artist_catalogue_remove_manual command without any pre-configured scope."
+commands.deny = ["artist_catalogue_remove_manual"]

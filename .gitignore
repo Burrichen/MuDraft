@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+*.log
+.DS_Store
+.vite/
+src-tauri/target/
+src-tauri/gen/schemas/

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-next-up-choose"
+description = "Enables the next_up_choose command without any pre-configured scope."
+commands.allow = ["next_up_choose"]
+
+[[permission]]
+identifier = "deny-next-up-choose"
+description = "Denies the next_up_choose command without any pre-configured scope."
+commands.deny = ["next_up_choose"]

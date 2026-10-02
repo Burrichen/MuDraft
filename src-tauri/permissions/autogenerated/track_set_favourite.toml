@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-track-set-favourite"
+description = "Enables the track_set_favourite command without any pre-configured scope."
+commands.allow = ["track_set_favourite"]
+
+[[permission]]
+identifier = "deny-track-set-favourite"
+description = "Denies the track_set_favourite command without any pre-configured scope."
+commands.deny = ["track_set_favourite"]

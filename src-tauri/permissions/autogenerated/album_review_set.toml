@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-album-review-set"
+description = "Enables the album_review_set command without any pre-configured scope."
+commands.allow = ["album_review_set"]
+
+[[permission]]
+identifier = "deny-album-review-set"
+description = "Denies the album_review_set command without any pre-configured scope."
+commands.deny = ["album_review_set"]

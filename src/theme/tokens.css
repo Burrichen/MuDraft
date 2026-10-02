@@ -1,0 +1,166 @@
+/*
+ * MuDraft design tokens. Slate surfaces, blue accents.
+ * Sizes use rem so OS font scaling and page zoom both apply.
+ * Contrast on --bg (WCAG 2.2): --text 17.2:1, --text-muted 7.3:1, --text-subtle 5.4:1,
+ * --accent-text 7.4:1, --focus-ring 10.4:1; --on-accent on --accent 5.2:1.
+ * Enforced by src/theme/contrast.test.ts.
+ */
+:root {
+  color-scheme: dark;
+
+  /* Slate scale */
+  --slate-950: #0b1120;
+  --slate-900: #0f172a;
+  --slate-850: #151f35;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-100: #f1f5f9;
+
+  /* Blue scale */
+  --blue-700: #1d4ed8;
+  --blue-600: #2563eb;
+  --blue-400: #60a5fa;
+  --blue-300: #93c5fd;
+
+  /* Semantic colours */
+  --bg: var(--slate-950);
+  --bg-sidebar: var(--slate-900);
+  --surface: var(--slate-900);
+  --surface-raised: var(--slate-850);
+  --surface-hover: var(--slate-800);
+  --border: var(--slate-700);
+  --border-strong: var(--slate-600);
+  --text: var(--slate-100);
+  --text-muted: var(--slate-400);
+  --text-subtle: #7c8aa3;
+  --accent: var(--blue-600);
+  --accent-hover: var(--blue-700);
+  --accent-text: var(--blue-400);
+  --accent-soft: rgb(37 99 235 / 18%);
+  --on-accent: #ffffff;
+  --focus-ring: var(--blue-300);
+  --ok: #4ade80;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --danger-soft: rgb(248 113 113 / 12%);
+  --star: #fbbf24;
+  --star-empty: var(--slate-600);
+
+  /* Typography */
+  --font-sans:
+    Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Spacing (4px grid) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 2.5rem;
+  --space-8: 3rem;
+
+  /* Shape */
+  --radius-sm: 0.375rem;
+  --radius: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-pill: 999px;
+  --shadow-raised: 0 0.5rem 1.5rem rgb(2 6 23 / 45%);
+
+  /* Layout */
+  --sidebar-width: 15rem;
+  --sidebar-collapsed: 4.25rem;
+  --content-max: 90rem;
+  --card-min: 10rem;
+  --control-height: 2.25rem;
+
+  /* Motion: short and subtle; removed entirely for reduced motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --duration: 150ms;
+  --duration-slow: 220ms;
+
+  font-family: var(--font-sans);
+  font-size: 100%;
+  line-height: var(--leading-normal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration: 0ms;
+    --duration-slow: 0ms;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent-text);
+}
+
+/* One consistent, clearly visible focus indicator for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

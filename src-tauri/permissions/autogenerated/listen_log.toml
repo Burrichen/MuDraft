@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-listen-log"
+description = "Enables the listen_log command without any pre-configured scope."
+commands.allow = ["listen_log"]
+
+[[permission]]
+identifier = "deny-listen-log"
+description = "Denies the listen_log command without any pre-configured scope."
+commands.deny = ["listen_log"]

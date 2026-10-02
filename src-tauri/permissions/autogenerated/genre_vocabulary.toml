@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-genre-vocabulary"
+description = "Enables the genre_vocabulary command without any pre-configured scope."
+commands.allow = ["genre_vocabulary"]
+
+[[permission]]
+identifier = "deny-genre-vocabulary"
+description = "Denies the genre_vocabulary command without any pre-configured scope."
+commands.deny = ["genre_vocabulary"]

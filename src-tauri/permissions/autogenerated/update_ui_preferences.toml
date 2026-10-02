@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-ui-preferences"
+description = "Enables the update_ui_preferences command without any pre-configured scope."
+commands.allow = ["update_ui_preferences"]
+
+[[permission]]
+identifier = "deny-update-ui-preferences"
+description = "Denies the update_ui_preferences command without any pre-configured scope."
+commands.deny = ["update_ui_preferences"]

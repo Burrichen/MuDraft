@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-listen-correct"
+description = "Enables the listen_correct command without any pre-configured scope."
+commands.allow = ["listen_correct"]
+
+[[permission]]
+identifier = "deny-listen-correct"
+description = "Denies the listen_correct command without any pre-configured scope."
+commands.deny = ["listen_correct"]

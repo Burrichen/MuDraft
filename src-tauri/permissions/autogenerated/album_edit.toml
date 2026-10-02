@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-album-edit"
+description = "Enables the album_edit command without any pre-configured scope."
+commands.allow = ["album_edit"]
+
+[[permission]]
+identifier = "deny-album-edit"
+description = "Denies the album_edit command without any pre-configured scope."
+commands.deny = ["album_edit"]

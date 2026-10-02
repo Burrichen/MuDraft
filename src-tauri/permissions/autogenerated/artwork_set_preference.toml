@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artwork-set-preference"
+description = "Enables the artwork_set_preference command without any pre-configured scope."
+commands.allow = ["artwork_set_preference"]
+
+[[permission]]
+identifier = "deny-artwork-set-preference"
+description = "Denies the artwork_set_preference command without any pre-configured scope."
+commands.deny = ["artwork_set_preference"]

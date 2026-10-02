@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-csv-import-enrich"
+description = "Enables the csv_import_enrich command without any pre-configured scope."
+commands.allow = ["csv_import_enrich"]
+
+[[permission]]
+identifier = "deny-csv-import-enrich"
+description = "Denies the csv_import_enrich command without any pre-configured scope."
+commands.deny = ["csv_import_enrich"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-edition-candidates"
+description = "Enables the edition_candidates command without any pre-configured scope."
+commands.allow = ["edition_candidates"]
+
+[[permission]]
+identifier = "deny-edition-candidates"
+description = "Denies the edition_candidates command without any pre-configured scope."
+commands.deny = ["edition_candidates"]

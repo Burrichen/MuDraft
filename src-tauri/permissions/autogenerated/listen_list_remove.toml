@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-listen-list-remove"
+description = "Enables the listen_list_remove command without any pre-configured scope."
+commands.allow = ["listen_list_remove"]
+
+[[permission]]
+identifier = "deny-listen-list-remove"
+description = "Denies the listen_list_remove command without any pre-configured scope."
+commands.deny = ["listen_list_remove"]

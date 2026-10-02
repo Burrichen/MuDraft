@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artwork-remove"
+description = "Enables the artwork_remove command without any pre-configured scope."
+commands.allow = ["artwork_remove"]
+
+[[permission]]
+identifier = "deny-artwork-remove"
+description = "Denies the artwork_remove command without any pre-configured scope."
+commands.deny = ["artwork_remove"]

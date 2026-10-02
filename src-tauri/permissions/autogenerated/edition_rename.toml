@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-edition-rename"
+description = "Enables the edition_rename command without any pre-configured scope."
+commands.allow = ["edition_rename"]
+
+[[permission]]
+identifier = "deny-edition-rename"
+description = "Denies the edition_rename command without any pre-configured scope."
+commands.deny = ["edition_rename"]

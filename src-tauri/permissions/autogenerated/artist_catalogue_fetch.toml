@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artist-catalogue-fetch"
+description = "Enables the artist_catalogue_fetch command without any pre-configured scope."
+commands.allow = ["artist_catalogue_fetch"]
+
+[[permission]]
+identifier = "deny-artist-catalogue-fetch"
+description = "Denies the artist_catalogue_fetch command without any pre-configured scope."
+commands.deny = ["artist_catalogue_fetch"]
