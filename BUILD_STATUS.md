@@ -11,7 +11,7 @@
 
 ## Checks run
 
-- macOS 26.6.2: `npm run check` (197 web, 200 Rust), `npm run e2e` 10/10, and a 9-screen × 4 size/zoom sweep with axe (no contrast findings).
+- macOS 26.6.2: `npm run check` (198 web, 200 Rust), `npm run e2e` 10/10, and a 9-screen × 4 size/zoom sweep with axe (no contrast findings).
 - Windows (`windows-latest` CI): `npm run check`. The native E2E passes 10/10 through tauri-driver on WebView2 153, run de-elevated (wry#1782). The installer is 210 MB, unsigned. Install, shortcuts, the production data folder, restart, upgrade from 0.9.0 and an uninstall that keeps the profile all pass; screenshots show the grey theme.
 
 ## Unverified
