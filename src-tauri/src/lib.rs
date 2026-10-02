@@ -7,10 +7,13 @@ mod commands;
 pub mod csv_import;
 pub mod db;
 pub mod domain;
+#[cfg(feature = "e2e")]
+mod e2e;
 pub mod error;
 pub mod library;
 pub mod metadata;
 mod paths;
+pub mod profile;
 mod state;
 
 use tauri::Manager;
@@ -19,7 +22,11 @@ use crate::paths::StorageProfile;
 use crate::state::AppState;
 
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    // Native E2E builds only (`--features e2e`): an embedded WebDriver server on macOS.
+    #[cfg(all(feature = "e2e", target_os = "macos"))]
+    let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
+    builder
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let state = init_state(app.handle());
@@ -31,6 +38,7 @@ pub fn run() {
             app.manage(state);
             app.manage(metadata);
             app.manage(artwork);
+            app.manage(commands::profile::ProfileImports::default());
             Ok(())
         })
         // Cached artwork, served only from files recorded in the database.
@@ -111,6 +119,12 @@ pub fn run() {
             commands::discography::artist_catalogue_exclude,
             commands::discography::artist_catalogue_add_to_listen_list,
             commands::stats::stats_overview,
+            commands::metadata::metadata_cache_stats,
+            commands::metadata::metadata_cache_clear,
+            commands::profile::profile_export,
+            commands::profile::profile_import_choose,
+            commands::profile::profile_import_confirm,
+            commands::profile::profile_import_cancel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MuDraft");

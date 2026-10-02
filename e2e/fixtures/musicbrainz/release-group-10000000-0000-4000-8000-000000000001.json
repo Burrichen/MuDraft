@@ -1,0 +1,23 @@
+{
+  "id": "10000000-0000-4000-8000-000000000001",
+  "title": "Homogenic",
+  "first-release-date": "1997-09-22",
+  "primary-type": "Album",
+  "artist-credit": [
+    {
+      "name": "Bj\u00f6rk",
+      "artist": {
+        "id": "87c5dedd-371d-4a53-9f7f-80522fb7f3cb",
+        "name": "Bj\u00f6rk",
+        "sort-name": "Bj\u00f6rk"
+      }
+    }
+  ],
+  "genres": [
+    {
+      "name": "electronic",
+      "count": 3
+    }
+  ],
+  "tags": []
+}

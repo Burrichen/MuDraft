@@ -19,31 +19,43 @@ pub struct CachedBody {
 pub trait ResponseCache: Send + Sync {
     fn get(&self, key: &str) -> Option<CachedBody>;
     fn put(&self, key: &str, body: &str, fetched_at: &str, ttl: Duration);
+    /// Release any open database handle (a profile restore is replacing the file).
+    fn suspend(&self) {}
+    /// Reopen after [`ResponseCache::suspend`].
+    fn resume(&self) {}
 }
 
 /// Cache in the app database's `metadata_cache` table, on its own connection so network
 /// work never holds the main database lock.
 pub struct SqliteCache {
-    conn: Mutex<Connection>,
+    path: std::path::PathBuf,
+    /// `None` while suspended; reads miss and writes are skipped meanwhile.
+    conn: Mutex<Option<Connection>>,
+}
+
+fn open_cache(path: &Path) -> Result<Connection, rusqlite::Error> {
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+    Ok(conn)
 }
 
 impl SqliteCache {
     /// Open an already-migrated database file.
     pub fn open(path: &Path) -> Result<Self, rusqlite::Error> {
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )?;
-        conn.busy_timeout(Duration::from_secs(5))?;
         Ok(Self {
-            conn: Mutex::new(conn),
+            path: path.to_path_buf(),
+            conn: Mutex::new(Some(open_cache(path)?)),
         })
     }
 }
 
 impl ResponseCache for SqliteCache {
     fn get(&self, key: &str) -> Option<CachedBody> {
-        let conn = self.conn.lock().ok()?;
+        let guard = self.conn.lock().ok()?;
+        let conn = guard.as_ref()?;
         conn.query_row(
             "SELECT body, fetched_at, expires_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              FROM metadata_cache WHERE key = ?1",
@@ -64,7 +76,8 @@ impl ResponseCache for SqliteCache {
     }
 
     fn put(&self, key: &str, body: &str, fetched_at: &str, ttl: Duration) {
-        let Ok(conn) = self.conn.lock() else { return };
+        let Ok(guard) = self.conn.lock() else { return };
+        let Some(conn) = guard.as_ref() else { return };
         let modifier = format!("+{} seconds", ttl.as_secs());
         if let Err(e) = conn.execute(
             "INSERT INTO metadata_cache (key, body, fetched_at, expires_at)
@@ -74,6 +87,23 @@ impl ResponseCache for SqliteCache {
             params![key, body, fetched_at, modifier],
         ) {
             eprintln!("MuDraft: metadata cache write failed: {e}");
+        }
+    }
+
+    fn suspend(&self) {
+        if let Ok(mut guard) = self.conn.lock() {
+            guard.take();
+        }
+    }
+
+    fn resume(&self) {
+        if let Ok(mut guard) = self.conn.lock()
+            && guard.is_none()
+        {
+            match open_cache(&self.path) {
+                Ok(c) => *guard = Some(c),
+                Err(e) => eprintln!("MuDraft: metadata cache unavailable: {e}"),
+            }
         }
     }
 }
@@ -114,6 +144,37 @@ impl ResponseCache for MemoryCache {
     }
 }
 
+/// Size of the stored MusicBrainz response cache (the app database's `metadata_cache`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheStats {
+    pub entries: u32,
+    pub bytes: i64,
+    pub expired: u32,
+}
+
+pub fn stats(conn: &Connection) -> crate::error::AppResult<CacheStats> {
+    Ok(conn.query_row(
+        "SELECT COUNT(*), COALESCE(SUM(length(CAST(body AS BLOB))), 0),
+                COUNT(*) FILTER (WHERE expires_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         FROM metadata_cache",
+        [],
+        |r| {
+            Ok(CacheStats {
+                entries: r.get(0)?,
+                bytes: r.get(1)?,
+                expired: r.get(2)?,
+            })
+        },
+    )?)
+}
+
+/// Forget cached provider responses. Library data, ratings, and listens are untouched;
+/// only offline re-lookups of metadata lose their saved copy.
+pub fn clear(tx: &rusqlite::Transaction<'_>) -> crate::error::AppResult<u32> {
+    Ok(tx.execute("DELETE FROM metadata_cache", [])? as u32)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +200,38 @@ mod tests {
         let stale = cache.get("k").unwrap();
         assert!(!stale.fresh, "expired entries are kept for offline use");
         assert_eq!(stale.body, "[]");
+    }
+
+    #[test]
+    fn stats_and_clear_touch_only_cached_responses() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("m.sqlite3");
+        let mut db = Database::open(&path).unwrap();
+        let cache = SqliteCache::open(&path).unwrap();
+        cache.put(
+            "https://example.org/a",
+            "{}",
+            "2026-10-01T00:00:00.000Z",
+            Duration::from_secs(60),
+        );
+        cache.put(
+            "https://example.org/b",
+            "[1]",
+            "2026-10-01T00:00:00.000Z",
+            Duration::from_secs(60),
+        );
+        db.write(|tx| {
+            tx.execute("INSERT INTO artist (id, name) VALUES ('keep', 'Kept')", [])?;
+            Ok(())
+        })
+        .unwrap();
+        let s = db.read(stats).unwrap();
+        assert_eq!((s.entries, s.bytes), (2, 5));
+        assert_eq!(db.write(clear).unwrap(), 2);
+        assert_eq!(db.read(stats).unwrap().entries, 0);
+        let kept: i64 = db
+            .read(|c| Ok(c.query_row("SELECT COUNT(*) FROM artist", [], |r| r.get(0))?))
+            .unwrap();
+        assert_eq!(kept, 1);
     }
 }

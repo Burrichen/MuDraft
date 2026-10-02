@@ -50,6 +50,8 @@ vi.mock("../../services/preferences", async (importOriginal) => ({
       sidebarCollapsed: false,
       lastRoute: "/listen-list",
       albumLayout: "grid",
+      startPage: "last",
+      showArtwork: true,
       ...patch,
     }),
   ),
@@ -96,7 +98,7 @@ function detail(over: Partial<AlbumDetail> = {}): AlbumDetail {
       {
         id: "00000000-0000-7000-8000-000000000001",
         name: "Listen ASAP",
-        color: "#f59e0b",
+        color: "#d4a017",
         builtin: true,
       },
     ],

@@ -21,6 +21,8 @@ vi.mock("../../services/preferences", async (importOriginal) => ({
       sidebarCollapsed: false,
       lastRoute: "/listen-list",
       albumLayout: "grid",
+      startPage: "last",
+      showArtwork: true,
       ...patch,
     }),
   ),

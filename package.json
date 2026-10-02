@@ -1,7 +1,7 @@
 {
   "name": "mudraft",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "packageManager": "npm@11.19.0",
   "engines": {
@@ -23,7 +23,10 @@
     "test:watch": "vitest",
     "check:web": "npm run typecheck && npm run lint && npm run format:check && npm run test",
     "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml --locked",
-    "check": "npm run check:web && npm run check:rust"
+    "check": "npm run check:web && npm run check:rust",
+    "e2e:build": "tauri build --debug --no-bundle --features e2e",
+    "e2e": "wdio run e2e/wdio.conf.ts",
+    "check:isolation": "node scripts/check-isolation.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.0",
@@ -43,6 +46,11 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
+    "@wdio/cli": "9.32.0",
+    "@wdio/local-runner": "9.32.0",
+    "@wdio/mocha-framework": "9.32.0",
+    "@wdio/spec-reporter": "9.32.0",
+    "@wdio/tauri-service": "1.4.0",
     "eslint": "10.11.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "eslint-plugin-react-refresh": "0.5.7",

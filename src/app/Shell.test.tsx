@@ -7,6 +7,14 @@ import { renderApp } from "../test/renderApp";
 import { showErrorDialog } from "../transport/dialogs";
 import { NativeError } from "../transport/native";
 
+vi.mock("../services/stats", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/stats")>()),
+  statsOverview: vi.fn(() => new Promise(() => undefined)),
+}));
+vi.mock("../services/metadata", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/metadata")>()),
+  metadataCacheStats: vi.fn(() => Promise.resolve({ entries: 0, bytes: 0, expired: 0 })),
+}));
 vi.mock("../services/health", () => ({ checkHealth: vi.fn() }));
 vi.mock("../transport/dialogs", () => ({ showErrorDialog: vi.fn(() => Promise.resolve()) }));
 vi.mock("../services/library", async (importOriginal) => ({
@@ -76,6 +84,8 @@ beforeEach(() => {
       sidebarCollapsed: false,
       lastRoute: "/listen-list",
       albumLayout: "grid",
+      startPage: "last",
+      showArtwork: true,
       ...patch,
     }),
   );

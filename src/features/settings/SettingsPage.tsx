@@ -4,7 +4,11 @@ import { LayoutToggle } from "../../components/Filters";
 import { PageHeader } from "../../components/PageHeader";
 import { ErrorState, LoadingState } from "../../components/States";
 import { checkHealth, type HealthReport } from "../../services/health";
+import { START_PAGES, type StartPage } from "../../services/preferences";
 import { ArtworkSettings } from "../artwork/ArtworkSettings";
+import { DataSources } from "./AboutSettings";
+import { ProfileSettings } from "./ProfileSettings";
+import { MetadataSettings } from "./MetadataSettings";
 import { ListeningSettings } from "../listening/ListeningSettings";
 import { TagManager } from "../tags/TagManager";
 
@@ -61,10 +65,19 @@ function StorageFacts() {
   );
 }
 
+const START_LABEL: Record<StartPage, string> = {
+  last: "The page you were last on",
+  "/listen-list": "Listen List",
+  "/next-up": "Next Up",
+  "/collection": "Collection",
+  "/stats": "Stats",
+};
+
 export function SettingsPage() {
   const { prefs, update } = usePreferences();
   const sidebarId = useId();
   const sidebarHint = useId();
+  const startId = useId();
   return (
     <section>
       <PageHeader title="Settings" />
@@ -73,6 +86,28 @@ export function SettingsPage() {
           <h2 id="settings-interface" className="section-title">
             Interface
           </h2>
+          <div className="setting-row">
+            <div className="setting-text">
+              <label className="setting-label" htmlFor={startId}>
+                Start page
+              </label>
+              <span className="setting-hint">Where MuDraft opens.</span>
+            </div>
+            <select
+              id={startId}
+              className="import-select"
+              value={prefs.startPage}
+              onChange={(e) => {
+                update({ startPage: e.target.value as StartPage });
+              }}
+            >
+              {START_PAGES.map((p) => (
+                <option key={p} value={p}>
+                  {START_LABEL[p]}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="setting-row">
             <div className="setting-text">
               <label className="setting-label" htmlFor={sidebarId}>
@@ -106,16 +141,27 @@ export function SettingsPage() {
               }}
             />
           </div>
+          <div className="setting-row">
+            <div className="setting-text">
+              <span className="setting-label">Rating scale</span>
+              <span className="setting-hint">
+                0 to 5 stars in half-star steps. Zero is a real rating; unrated stays unrated.
+              </span>
+            </div>
+          </div>
         </section>
         <ListeningSettings />
         <TagManager />
         <ArtworkSettings />
+        <MetadataSettings />
+        <ProfileSettings />
         <section className="panel section" aria-labelledby="settings-storage">
           <h2 id="settings-storage" className="section-title">
             Storage
           </h2>
           <StorageFacts />
         </section>
+        <DataSources />
       </div>
     </section>
   );

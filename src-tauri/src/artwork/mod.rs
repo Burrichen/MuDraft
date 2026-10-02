@@ -536,8 +536,15 @@ pub fn serve(state: &AppState, owner_type: &str, owner_id: &str) -> AppResult<(V
             })
         })?
         .ok_or_else(|| AppError::not_found("artwork", &owner_id))?;
+    if !crate::profile::safe_file_name(&name) {
+        return Err(AppError::not_found("artwork", &owner_id));
+    }
     let bytes = std::fs::read(artwork_dir(state).join(&name))
         .map_err(|e| AppError::StorageUnavailable(format!("artwork file: {e}")))?;
+    // Only ever serve bytes that really are the recorded image type.
+    if sniff_image(&bytes) != Some(mime.as_str()) {
+        return Err(AppError::not_found("artwork", &owner_id));
+    }
     Ok((bytes, mime))
 }
 

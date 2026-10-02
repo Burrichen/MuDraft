@@ -18,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/0008_next_up.sql"),
     include_str!("migrations/0009_discography.sql"),
     include_str!("migrations/0010_catalogue_credits.sql"),
+    include_str!("migrations/0011_asap_mustard.sql"),
 ];
 
 pub const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
@@ -89,6 +90,38 @@ impl Database {
         Ok(())
     }
 
+    /// A new, empty database at exactly `version` (foreign keys off) for loading a profile
+    /// archive made at that schema. The caller verifies references, closes it, and then
+    /// opens it with [`Database::open`], which upgrades it with the normal migrations.
+    pub(crate) fn create_at_version(path: &Path, version: i64) -> AppResult<Connection> {
+        if !(1..=SCHEMA_VERSION).contains(&version) {
+            return Err(AppError::validation(
+                "schema version",
+                format!("{version} is not a version this MuDraft can read"),
+            ));
+        }
+        let mut conn = Connection::open_with_flags(
+            path,
+            OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )?;
+        if user_version(&conn)? != 0 {
+            return Err(AppError::Conflict(format!(
+                "{} already holds a database",
+                path.display()
+            )));
+        }
+        conn.pragma_update(None, "foreign_keys", false)?;
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        for (i, sql) in MIGRATIONS.iter().enumerate().take(version as usize) {
+            tx.execute_batch(sql)?;
+            tx.pragma_update(None, "user_version", i as i64 + 1)?;
+        }
+        tx.commit()?;
+        Ok(conn)
+    }
+
     /// Read-only access for queries.
     pub fn read<T>(&self, f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
         f(&self.conn)
@@ -122,7 +155,7 @@ fn user_version(conn: &Connection) -> AppResult<i64> {
     Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
 }
 
-fn quick_check(conn: &Connection) -> AppResult<()> {
+pub(crate) fn quick_check(conn: &Connection) -> AppResult<()> {
     let result: String = conn.query_row("PRAGMA quick_check", [], |row| row.get(0))?;
     if result == "ok" {
         Ok(())
@@ -131,7 +164,7 @@ fn quick_check(conn: &Connection) -> AppResult<()> {
     }
 }
 
-fn check_foreign_keys(conn: &Connection) -> AppResult<()> {
+pub(crate) fn check_foreign_keys(conn: &Connection) -> AppResult<()> {
     let mut stmt = conn.prepare("PRAGMA foreign_key_check")?;
     let mut rows = stmt.query([])?;
     if let Some(row) = rows.next()? {
@@ -209,6 +242,39 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM selection_attempt", [], |r| r.get(0))
             .unwrap();
         assert_eq!(attempts, 0, "cascade from the rebuilt parent still works");
+    }
+
+    #[test]
+    fn v11_recolours_only_the_untouched_listen_asap_default() {
+        let asap = |version_10_colour: Option<&str>| {
+            let dir = tempfile::tempdir().unwrap();
+            let path = dir.path().join("v10.sqlite3");
+            {
+                let conn = Connection::open(&path).unwrap();
+                for (i, sql) in MIGRATIONS.iter().take(10).enumerate() {
+                    conn.execute_batch(sql).unwrap();
+                    conn.pragma_update(None, "user_version", i as i64 + 1)
+                        .unwrap();
+                }
+                if let Some(c) = version_10_colour {
+                    conn.execute(
+                        "UPDATE tag SET color = ?1 WHERE builtin_key = 'listen_asap'",
+                        [c],
+                    )
+                    .unwrap();
+                }
+            }
+            let db = Database::open(&path).unwrap();
+            db.conn
+                .query_row(
+                    "SELECT color FROM tag WHERE builtin_key = 'listen_asap'",
+                    [],
+                    |r| r.get::<_, String>(0),
+                )
+                .unwrap()
+        };
+        assert_eq!(asap(None), "#d4a017", "old default becomes mustard");
+        assert_eq!(asap(Some("#22d3ee")), "#22d3ee", "a chosen colour is kept");
     }
 
     #[test]

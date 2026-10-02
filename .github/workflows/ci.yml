@@ -47,6 +47,76 @@ jobs:
       - name: Lint, type-check, and test (web + Rust)
         run: npm run check
 
+      # The embedded WebDriver server must never be part of a normal build.
+      - name: Test-only automation is not in the release dependency graph
+        shell: bash
+        run: npm run check:isolation
+
       # Compiles the release app without producing or publishing installers.
       - name: Compile release desktop binary
         run: npm run build:native
+
+  e2e:
+    name: Native end-to-end (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Windows drives the app through tauri-driver and the msedgedriver matching the
+      # installed WebView2 runtime (macOS uses the server the test build embeds).
+      - name: Install tauri-driver and msedgedriver
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo install tauri-driver --version 2.1.0 --locked
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $version = (Get-ItemProperty $key).pv
+          Write-Host "WebView2 runtime $version"
+          $dir = Join-Path $env:RUNNER_TEMP 'msedgedriver'
+          Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile "$dir.zip"
+          Expand-Archive "$dir.zip" $dir
+          "TAURI_NATIVE_DRIVER=$dir\msedgedriver.exe" >> $env:GITHUB_ENV
+
+      # Debug build with `--features e2e`: fixtures replace MusicBrainz and native
+      # dialogs (plus an embedded WebDriver server on macOS). Never shipped.
+      - name: Build the test app
+        run: npm run e2e:build
+
+      - name: Run the native journey
+        if: runner.os != 'Windows'
+        run: npm run e2e
+
+      # WebView2 150+ ignores msedgedriver's debugging-port argument in elevated
+      # processes, and hosted Windows runners are elevated, so run the journey
+      # de-elevated (the Tauri maintainers' workaround, tauri-apps/wry#1782).
+      - name: Run the native journey (de-elevated)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          winget install gerardog.gsudo --version 2.6.1 --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:PATH = "$env:ProgramFiles\gsudo\Current;$env:PATH"
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          icacls "$env:RUNNER_TEMP" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          gsudo --integrity Medium npm run e2e
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

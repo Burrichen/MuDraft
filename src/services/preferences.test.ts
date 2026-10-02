@@ -1,12 +1,18 @@
 import { callNative } from "../transport/native";
-import { isPersistableRoute, loadPreferences, updatePreferences } from "./preferences";
+import { isPersistableRoute, loadPreferences, startRoute, updatePreferences } from "./preferences";
 
 vi.mock("../transport/native", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../transport/native")>()),
   callNative: vi.fn(),
 }));
 
-const stored = { sidebarCollapsed: true, lastRoute: "/stats", albumLayout: "list" };
+const stored = {
+  sidebarCollapsed: true,
+  lastRoute: "/stats",
+  albumLayout: "list" as const,
+  startPage: "last" as const,
+  showArtwork: true,
+};
 
 describe("preferences service", () => {
   it("loads validated preferences", async () => {
@@ -25,6 +31,16 @@ describe("preferences service", () => {
 
   it("rejects malformed responses", async () => {
     vi.mocked(callNative).mockResolvedValueOnce({ ...stored, albumLayout: "masonry" });
+    await expect(loadPreferences()).rejects.toMatchObject({ code: "invalid_response" });
+  });
+
+  it("opens the chosen start page, or the last page when set to last", () => {
+    expect(startRoute(stored)).toBe("/stats");
+    expect(startRoute({ ...stored, startPage: "/next-up" })).toBe("/next-up");
+  });
+
+  it("rejects unknown start pages", async () => {
+    vi.mocked(callNative).mockResolvedValueOnce({ ...stored, startPage: "/diary" });
     await expect(loadPreferences()).rejects.toMatchObject({ code: "invalid_response" });
   });
 

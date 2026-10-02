@@ -1,0 +1,176 @@
+name: Windows release
+
+# Builds the Windows x64 NSIS installer on a Windows runner and verifies it there
+# (install, restart, upgrade, uninstall). Pull requests and manual runs stop at a
+# verified artifact; pushing a `v*` tag also publishes a GitHub release.
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Build and verify installer (Windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      signed: ${{ steps.signing.outputs.signed }}
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Test-only automation is not in the release dependency graph
+        shell: bash
+        run: npm run check:isolation
+
+      - name: Read version
+        id: version
+        run: |
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$v") {
+            throw "Tag $env:GITHUB_REF_NAME does not match app version $v"
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
+
+      # Optional Authenticode signing. Provide your own code-signing certificate as
+      # repository secrets: WINDOWS_CERTIFICATE (base64 .pfx) and
+      # WINDOWS_CERTIFICATE_PASSWORD; optionally the variable WINDOWS_TIMESTAMP_URL.
+      # Without them the build is an unsigned personal release.
+      - name: Configure signing (only when a certificate secret exists)
+        id: signing
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            Write-Host 'No signing certificate configured: building an UNSIGNED installer.'
+            "signed=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          Remove-Item $pfx
+          $timestamp = if ($env:WINDOWS_TIMESTAMP_URL) { $env:WINDOWS_TIMESTAMP_URL } else { 'http://timestamp.digicert.com' }
+          @{ bundle = @{ windows = @{
+              certificateThumbprint = $cert.Thumbprint
+              digestAlgorithm = 'sha256'
+              timestampUrl = $timestamp
+          } } } | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $env:RUNNER_TEMP 'signing.json')
+          "signed=true" >> $env:GITHUB_OUTPUT
+
+      # An older-versioned installer of the same code, used only as the upgrade baseline.
+      - name: Build upgrade-test baseline installer (not published)
+        run: |
+          $conf = Join-Path $env:RUNNER_TEMP 'baseline.json'
+          '{ "version": "0.9.0" }' | Set-Content $conf
+          npx tauri build --ci --bundles nsis --config $conf
+          if ($LASTEXITCODE -ne 0) { throw 'baseline build failed' }
+          $dir = New-Item -ItemType Directory -Force (Join-Path $env:RUNNER_TEMP 'baseline')
+          Move-Item src-tauri/target/release/bundle/nsis/MuDraft_0.9.0_x64-setup.exe $dir
+
+      - name: Build release installer
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+        run: |
+          $cli = @('tauri', 'build', '--ci', '--bundles', 'nsis')
+          if ($env:SIGNED -eq 'true') { $cli += @('--config', (Join-Path $env:RUNNER_TEMP 'signing.json')) }
+          npx @cli
+          if ($LASTEXITCODE -ne 0) { throw 'release build failed' }
+          $v = '${{ steps.version.outputs.version }}'
+          New-Item -ItemType Directory -Force release | Out-Null
+          $out = "release/MuDraft_${v}_windows_x64_setup.exe"
+          Move-Item "src-tauri/target/release/bundle/nsis/MuDraft_${v}_x64-setup.exe" $out
+          $size = (Get-Item $out).Length
+          Write-Host ("Installer: {0} ({1:N1} MB)" -f $out, ($size / 1MB))
+          if ($size -lt 100MB) { throw 'Installer is too small to contain the offline WebView2 installer' }
+          $sig = Get-AuthenticodeSignature $out
+          Write-Host "Authenticode status: $($sig.Status)"
+          if ($env:SIGNED -eq 'true' -and $sig.Status -eq 'NotSigned') { throw 'Signing was configured but the installer is not signed' }
+          if ($env:SIGNED -ne 'true' -and $sig.Status -ne 'NotSigned') { throw 'Unexpected signature on an unsigned build' }
+          Get-FileHash release/*.exe -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content release/SHA256SUMS.txt
+
+      - name: Verify install, restart, upgrade, and uninstall
+        run: |
+          $v = '${{ steps.version.outputs.version }}'
+          ./scripts/windows/verify-install.ps1 `
+            -Installer "release/MuDraft_${v}_windows_x64_setup.exe" `
+            -OldInstaller (Join-Path $env:RUNNER_TEMP 'baseline/MuDraft_0.9.0_x64-setup.exe') `
+            -Version $v -OldVersion '0.9.0' `
+            -Shots verify-shots
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: MuDraft-windows-x64
+          path: release/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: windows-verify-screenshots
+          path: verify-shots/
+          if-no-files-found: ignore
+
+  publish:
+    name: Publish GitHub release
+    needs: package
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: MuDraft-windows-x64
+          path: release
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package.outputs.version }}
+          SIGNED: ${{ needs.package.outputs.signed }}
+        run: |
+          title="MuDraft v${VERSION}"
+          notes="docs/release-notes/v${VERSION}.md"
+          if [ "$SIGNED" != "true" ]; then
+            title="${title} (unsigned personal release)"
+          fi
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file "$notes" --verify-tag

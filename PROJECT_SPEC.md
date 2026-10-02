@@ -6,7 +6,8 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 
 - Tauri 2, React, TypeScript, Vite. SQLite accessed only through narrow Rust commands.
 - No hosted backend, accounts, telemetry, subscription, or runtime Node server.
-- Sleek dark navy/blue UI inspired by FDraft: collapsible sidebar, artwork cards, restrained motion.
+- Sleek dark UI inspired by FDraft: collapsible sidebar, artwork cards, restrained motion.
+- Colour (supersedes the earlier navy/blue base): a neutral charcoal/grey app, after VS Code's default dark theme and FDraft, with blue accents only. Backgrounds, sidebar, cards, dialogs, inputs, and unselected bubbles stay grey (`#1E1E1E`, `#252526`, `#2D2D30`; borders `#3C3C3C`; text `#D4D4D4`/`#A6A6A6`). Blue (`#3794FF` family) is reserved for primary actions, links, focus rings, selected indicators, and progress fills; active nav/filter states may use restrained blue. No navy surfaces or broad blue gradients. Artwork, user tag colours, and success/warning/error colours are kept; Listen ASAP defaults to mustard yellow. Change colours only through shared theme tokens (`src/theme/tokens.css`), keeping WCAG AA contrast. No theme selector.
 - Navigation: Listen List, Next Up, Collection, Stats, Settings; nested Album and Artist pages.
 
 ## 2. Data

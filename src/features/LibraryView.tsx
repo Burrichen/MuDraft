@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
-import { Link, useLocation } from "react-router";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { usePreferences } from "../app/preferencesContext";
 import { useDebounced } from "../app/useDebounced";
 import { AlbumCollection, type AlbumSummary } from "../components/AlbumCard";
@@ -28,6 +28,9 @@ import { loggedMessage } from "./listening/loggedMessage";
 import { MatchDialog, type MatchChoice } from "./match/MatchDialog";
 import { useMakeNextUp } from "./next-up/useMakeNextUp";
 import { TagPicker } from "./tags/TagPicker";
+
+/** Cards rendered at a time; large libraries grow on request instead of all at once. */
+const PAGE = 120;
 
 const SORTS: { value: SortOrder; label: string }[] = [
   { value: "added_newest", label: "Recently added" },
@@ -95,13 +98,85 @@ export function LibraryView({
   const version = useLibraryVersion();
   const ids = { search: useId(), sort: useId(), genres: useId(), tags: useId() };
 
-  const [searchInput, setSearchInput] = useState("");
+  const [searchInput, setSearchInput] = useState(
+    () => new URLSearchParams(location.search).get("q") ?? "",
+  );
   const typed = useDebounced(searchInput.trim(), 200);
   // Typing is debounced; clearing applies at once.
   const search = searchInput.trim() === "" ? "" : typed;
-  const [sort, setSort] = useState<SortOrder>("added_newest");
-  const [genres, setGenres] = useState<string[]>([]);
-  const [tagIds, setTagIds] = useState<string[]>([]);
+  // The view (search, sort, filters, drill-downs, how much is shown) lives in the URL,
+  // so returning from an album page restores it. Every change is one URL write, which
+  // keeps concurrent updates from overwriting each other.
+  const [params, setParams] = useSearchParams();
+  // The router hands updaters the params of the last render, so two writes before a
+  // re-render (e.g. a debounced search, then a filter click) would drop the first.
+  // Chain writes through the latest params instead.
+  const latestParams = useRef(params);
+  useLayoutEffect(() => {
+    latestParams.current = params;
+  }, [params]);
+  const updateParams = (edit: (p: URLSearchParams) => void) => {
+    const next = new URLSearchParams(latestParams.current);
+    edit(next);
+    latestParams.current = next;
+    setParams(next, { replace: true });
+  };
+  const putList = (p: URLSearchParams, key: string, values: readonly string[]) => {
+    p.delete(key);
+    for (const v of values) p.append(key, v);
+  };
+  const wantedSort = params.get("sort");
+  const sort: SortOrder = SORTS.some((o) => o.value === wantedSort)
+    ? (wantedSort as SortOrder)
+    : "added_newest";
+  const genres = params.getAll("genre");
+  const tagIds = params.getAll("tag");
+  const setSort = (next: SortOrder) => {
+    updateParams((p) => {
+      if (next === "added_newest") p.delete("sort");
+      else p.set("sort", next);
+    });
+  };
+  const setGenres = (next: readonly string[]) => {
+    updateParams((p) => {
+      putList(p, "genre", next);
+    });
+  };
+  const setTagIds = (next: readonly string[]) => {
+    updateParams((p) => {
+      putList(p, "tag", next);
+    });
+  };
+  const numberParam = (key: string) => {
+    const v = Number(params.get(key));
+    return params.has(key) && Number.isInteger(v) ? v : undefined;
+  };
+  const drill = {
+    year: numberParam("year"),
+    decade: numberParam("decade"),
+    yearUnknown: params.get("yearUnknown") === "1",
+    artistId: params.get("artist") ?? undefined,
+  };
+  const shown = numberParam("show");
+  const limit = shown !== undefined && shown > PAGE ? shown : PAGE;
+  const setLimit = (n: number) => {
+    updateParams((p) => {
+      p.set("show", String(n));
+    });
+  };
+  const queryKey = JSON.stringify({ search, sort, genres, tagIds, drill });
+
+  // Write typed (debounced) searches to the URL; clearing writes it directly.
+  const writtenSearch = useRef(search);
+  useEffect(() => {
+    if (writtenSearch.current === search) return;
+    writtenSearch.current = search;
+    updateParams((p) => {
+      if (search) p.set("q", search);
+      else p.delete("q");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [retry, setRetry] = useState(0);
 
@@ -119,7 +194,24 @@ export function LibraryView({
 
   useEffect(() => {
     let cancelled = false;
-    listLibrary(source, { ...(search ? { search } : {}), sort, genres, tagIds }).then(
+    const q = JSON.parse(queryKey) as {
+      search: string;
+      sort: SortOrder;
+      genres: string[];
+      tagIds: string[];
+      drill: typeof drill;
+    };
+    const d = q.drill;
+    listLibrary(source, {
+      ...(q.search ? { search: q.search } : {}),
+      sort: q.sort,
+      genres: q.genres,
+      tagIds: q.tagIds,
+      ...(d.year !== undefined ? { year: d.year } : {}),
+      ...(d.decade !== undefined ? { decade: d.decade } : {}),
+      ...(d.yearUnknown ? { yearUnknown: true } : {}),
+      ...(d.artistId ? { artistId: d.artistId } : {}),
+    }).then(
       (data) => {
         if (!cancelled) setLoad({ kind: "ready", data });
       },
@@ -130,7 +222,8 @@ export function LibraryView({
     return () => {
       cancelled = true;
     };
-  }, [source, search, sort, genres, tagIds, version, retry]);
+    // The query is read through `queryKey` so the effect reruns only when it changes.
+  }, [source, queryKey, version, retry]);
 
   const data = load.kind === "ready" ? load.data : null;
 
@@ -151,7 +244,23 @@ export function LibraryView({
   }, [missingKey]);
   const items = data?.items ?? [];
   const byAlbum = new Map(items.map((i) => [i.albumId, i]));
-  const filtering = search !== "" || genres.length > 0 || tagIds.length > 0;
+  const drillChips = [
+    drill.year !== undefined && { key: "year", label: `Released in ${String(drill.year)}` },
+    drill.decade !== undefined && {
+      key: "decade",
+      label: `Released in the ${String(drill.decade)}s`,
+    },
+    drill.yearUnknown && { key: "yearUnknown", label: "Release year unknown" },
+    drill.artistId && {
+      key: "artist",
+      label: `By ${
+        items.flatMap((i) => i.artists).find((a) => a.id === drill.artistId)?.name ??
+        "the chosen artist"
+      }`,
+    },
+  ].filter(Boolean) as { key: string; label: string }[];
+  const filtering =
+    search !== "" || genres.length > 0 || tagIds.length > 0 || drillChips.length > 0;
   const selectedIds = [...selected].filter((id) => byAlbum.has(id));
 
   const assignedFor = (albumIds: readonly string[]) => {
@@ -161,10 +270,19 @@ export function LibraryView({
     return counts;
   };
 
+  const clearDrill = (key: string) => {
+    updateParams((p) => {
+      p.delete(key);
+    });
+  };
+
   const clearFilters = () => {
+    writtenSearch.current = "";
     setSearchInput("");
-    setGenres([]);
-    setTagIds([]);
+    updateParams((p) => {
+      for (const k of ["q", "genre", "tag", "year", "decade", "yearUnknown", "artist", "show"])
+        p.delete(k);
+    });
   };
 
   const confirmRemove = async () => {
@@ -447,6 +565,23 @@ export function LibraryView({
               </div>
             </div>
           )}
+          {drillChips.length > 0 && (
+            <div className="filter-group" role="group" aria-label="Showing only">
+              <span className="filter-group-label">Showing only</span>
+              <div className="filter-bubbles">
+                {drillChips.map((c) => (
+                  <FilterBubble
+                    key={c.key}
+                    label={`${c.label} ×`}
+                    pressed
+                    onToggle={() => {
+                      clearDrill(c.key);
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
           <p className="setting-hint" role="status">
             {filtering
               ? `${String(items.length)} of ${String(data.total)} albums`
@@ -518,12 +653,26 @@ export function LibraryView({
       )}
       {data && (
         <AlbumCollection
-          albums={items.map((i) => toSummary(i, source))}
+          albums={items.slice(0, limit).map((i) => toSummary(i, source))}
           layout={prefs.albumLayout}
           label={title}
           empty={data.total === 0 ? emptyList : noMatches}
           cardExtras={cardExtras}
         />
+      )}
+      {items.length > limit && (
+        <div className="show-more">
+          <span className="setting-hint">
+            Showing {limit} of {items.length}
+          </span>
+          <Button
+            onClick={() => {
+              setLimit(limit + PAGE);
+            }}
+          >
+            Show {Math.min(PAGE, items.length - limit)} more
+          </Button>
+        </div>
       )}
 
       <Popover

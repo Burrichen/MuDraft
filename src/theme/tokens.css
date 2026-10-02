@@ -1,53 +1,58 @@
 /*
- * MuDraft design tokens. Slate surfaces, blue accents.
+ * MuDraft design tokens. Neutral charcoal surfaces (after VS Code's default dark theme and
+ * FDraft) with blue used ONLY as an accent: primary actions, links, focus rings, selected
+ * indicators, and progress fills. Large surfaces never take a blue fill.
  * Sizes use rem so OS font scaling and page zoom both apply.
- * Contrast on --bg (WCAG 2.2): --text 17.2:1, --text-muted 7.3:1, --text-subtle 5.4:1,
- * --accent-text 7.4:1, --focus-ring 10.4:1; --on-accent on --accent 5.2:1.
+ * Contrast on --bg (WCAG 2.2): --text 11.3:1, --text-muted 6.9:1, --text-subtle 6.2:1,
+ * --accent-text 6.7:1, --focus-ring 5.4:1; --on-accent on --accent 4.9:1.
  * Enforced by src/theme/contrast.test.ts.
  */
 :root {
   color-scheme: dark;
 
-  /* Slate scale */
-  --slate-950: #0b1120;
-  --slate-900: #0f172a;
-  --slate-850: #151f35;
-  --slate-800: #1e293b;
-  --slate-700: #334155;
-  --slate-600: #475569;
-  --slate-400: #94a3b8;
-  --slate-300: #cbd5e1;
-  --slate-100: #f1f5f9;
+  /* Grey scale */
+  --grey-900: #1e1e1e;
+  --grey-850: #252526;
+  --grey-800: #2d2d30;
+  --grey-750: #37373d;
+  --grey-700: #3c3c3c;
+  --grey-500: #6e6e6e;
+  --grey-400: #9d9d9d;
+  --grey-300: #a6a6a6;
+  --grey-100: #d4d4d4;
 
-  /* Blue scale */
-  --blue-700: #1d4ed8;
-  --blue-600: #2563eb;
-  --blue-400: #60a5fa;
-  --blue-300: #93c5fd;
+  /* Blue accent scale */
+  --blue-700: #005fb8;
+  --blue-600: #1f6fd1;
+  --blue-500: #3794ff;
+  --blue-400: #4daafc;
 
   /* Semantic colours */
-  --bg: var(--slate-950);
-  --bg-sidebar: var(--slate-900);
-  --surface: var(--slate-900);
-  --surface-raised: var(--slate-850);
-  --surface-hover: var(--slate-800);
-  --border: var(--slate-700);
-  --border-strong: var(--slate-600);
-  --text: var(--slate-100);
-  --text-muted: var(--slate-400);
-  --text-subtle: #7c8aa3;
+  --bg: var(--grey-900);
+  --bg-sidebar: var(--grey-850);
+  --surface: var(--grey-850);
+  --surface-raised: var(--grey-800);
+  --surface-hover: var(--grey-750);
+  --border: var(--grey-700);
+  --border-strong: var(--grey-500);
+  --text: var(--grey-100);
+  --text-muted: var(--grey-300);
+  --text-subtle: var(--grey-400);
   --accent: var(--blue-600);
   --accent-hover: var(--blue-700);
   --accent-text: var(--blue-400);
-  --accent-soft: rgb(37 99 235 / 18%);
+  --accent-indicator: var(--blue-500);
+  --accent-soft: rgb(55 148 255 / 14%);
   --on-accent: #ffffff;
-  --focus-ring: var(--blue-300);
+  --focus-ring: var(--blue-500);
   --ok: #4ade80;
   --warning: #fbbf24;
   --danger: #f87171;
   --danger-soft: rgb(248 113 113 / 12%);
   --star: #fbbf24;
-  --star-empty: var(--slate-600);
+  --star-empty: var(--grey-500);
+  --backdrop: rgb(0 0 0 / 60%);
+  --artwork-edge: rgb(255 255 255 / 8%);
 
   /* Typography */
   --font-sans:
@@ -79,7 +84,7 @@
   --radius: 0.625rem;
   --radius-lg: 0.875rem;
   --radius-pill: 999px;
-  --shadow-raised: 0 0.5rem 1.5rem rgb(2 6 23 / 45%);
+  --shadow-raised: 0 0.5rem 1.5rem rgb(0 0 0 / 45%);
 
   /* Layout */
   --sidebar-width: 15rem;

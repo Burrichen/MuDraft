@@ -56,6 +56,14 @@ pub struct ListQuery {
     pub sort: SortOrder,
     pub genres: Vec<String>,
     pub tag_ids: Vec<String>,
+    /// Drill-downs (e.g. from Stats), all on the canonical album's original year.
+    pub year: Option<i64>,
+    /// First year of a decade, e.g. 1990.
+    pub decade: Option<i64>,
+    /// Only albums whose original year is unknown.
+    pub year_unknown: bool,
+    /// Albums credited to this artist (collaborations included).
+    pub artist_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -305,8 +313,32 @@ pub fn query(conn: &Connection, source: Source, q: &ListQuery) -> AppResult<List
         .map(|t| parse_uuid("tag", t))
         .collect::<AppResult<_>>()?;
 
+    if let Some(d) = q.decade
+        && d.rem_euclid(10) != 0
+    {
+        return Err(AppError::validation(
+            "decade",
+            "use the decade's first year, e.g. 1990",
+        ));
+    }
+    let artist = q
+        .artist_id
+        .as_deref()
+        .map(|a| parse_uuid("artist", a))
+        .transpose()?;
     let mut items: Vec<ListItem> = all
         .into_iter()
+        .filter(|i| q.year.is_none_or(|y| i.original_year == Some(y)))
+        .filter(|i| {
+            q.decade
+                .is_none_or(|d| i.original_year.is_some_and(|y| (d..d + 10).contains(&y)))
+        })
+        .filter(|i| !q.year_unknown || i.original_year.is_none())
+        .filter(|i| {
+            artist
+                .as_ref()
+                .is_none_or(|a| i.artists.iter().any(|x| &x.id == a))
+        })
         .filter(|i| {
             search.as_ref().is_none_or(|s| {
                 norm(&i.title).contains(s.as_str())

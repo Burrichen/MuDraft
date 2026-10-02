@@ -11,6 +11,8 @@ use crate::error::{AppError, AppResult};
 const SIDEBAR_COLLAPSED: &str = "ui.sidebar_collapsed";
 const LAST_ROUTE: &str = "ui.last_route";
 const ALBUM_LAYOUT: &str = "ui.album_layout";
+const START_PAGE: &str = "ui.start_page";
+const SHOW_ARTWORK: &str = "ui.show_artwork";
 
 pub const DEFAULT_ROUTE: &str = "/listen-list";
 const PRIMARY_ROUTES: &[&str] = &[
@@ -28,12 +30,30 @@ pub enum AlbumLayout {
     List,
 }
 
+/// Where the app opens: the page last visited, or a fixed section.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StartPage {
+    #[serde(rename = "last")]
+    Last,
+    #[serde(rename = "/listen-list")]
+    ListenList,
+    #[serde(rename = "/next-up")]
+    NextUp,
+    #[serde(rename = "/collection")]
+    Collection,
+    #[serde(rename = "/stats")]
+    Stats,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UiPreferences {
     pub sidebar_collapsed: bool,
     pub last_route: String,
     pub album_layout: AlbumLayout,
+    pub start_page: StartPage,
+    /// Show cached artwork on cards and album pages (downloads are a separate consent).
+    pub show_artwork: bool,
 }
 
 impl Default for UiPreferences {
@@ -42,6 +62,8 @@ impl Default for UiPreferences {
             sidebar_collapsed: false,
             last_route: DEFAULT_ROUTE.to_owned(),
             album_layout: AlbumLayout::Grid,
+            start_page: StartPage::Last,
+            show_artwork: true,
         }
     }
 }
@@ -53,6 +75,8 @@ pub struct UiPreferencesPatch {
     pub sidebar_collapsed: Option<bool>,
     pub last_route: Option<String>,
     pub album_layout: Option<AlbumLayout>,
+    pub start_page: Option<StartPage>,
+    pub show_artwork: Option<bool>,
 }
 
 pub fn load(conn: &Connection) -> AppResult<UiPreferences> {
@@ -69,6 +93,8 @@ pub fn load(conn: &Connection) -> AppResult<UiPreferences> {
         last_route,
         album_layout: read_value(conn, ALBUM_LAYOUT, "\"grid\" or \"list\"")?
             .unwrap_or(d.album_layout),
+        start_page: read_value(conn, START_PAGE, "a start page")?.unwrap_or(d.start_page),
+        show_artwork: read_value(conn, SHOW_ARTWORK, "true/false")?.unwrap_or(d.show_artwork),
     })
 }
 
@@ -87,6 +113,12 @@ pub fn update(tx: &Transaction<'_>, patch: &UiPreferencesPatch) -> AppResult<UiP
     }
     if let Some(layout) = patch.album_layout {
         write_value(tx, ALBUM_LAYOUT, layout)?;
+    }
+    if let Some(page) = patch.start_page {
+        write_value(tx, START_PAGE, page)?;
+    }
+    if let Some(show) = patch.show_artwork {
+        write_value(tx, SHOW_ARTWORK, show)?;
     }
     load(tx)
 }
@@ -116,6 +148,26 @@ pub fn normalize_route(raw: &str) -> AppResult<String> {
 mod tests {
     use super::*;
     use crate::db::Database;
+
+    #[test]
+    fn start_page_and_artwork_display_persist() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("p.sqlite3");
+        {
+            let mut db = Database::open(&path).unwrap();
+            let p = db.read(load).unwrap();
+            assert_eq!((p.start_page, p.show_artwork), (StartPage::Last, true));
+            let patch: UiPreferencesPatch =
+                serde_json::from_str(r#"{"startPage": "/stats", "showArtwork": false}"#).unwrap();
+            db.write(|tx| update(tx, &patch)).unwrap();
+        }
+        let db = Database::open(&path).unwrap();
+        let p = db.read(load).unwrap();
+        assert_eq!((p.start_page, p.show_artwork), (StartPage::Stats, false));
+        assert!(
+            serde_json::from_str::<UiPreferencesPatch>(r#"{"startPage": "/settings"}"#).is_err()
+        );
+    }
 
     #[test]
     fn routes_are_restricted_to_app_pages() {
@@ -174,6 +226,8 @@ mod tests {
             sidebar_collapsed: Some(true),
             last_route: Some("/nope".into()),
             album_layout: None,
+            start_page: None,
+            show_artwork: None,
         };
         assert_eq!(
             db.write(|tx| update(tx, &patch)).unwrap_err().code(),

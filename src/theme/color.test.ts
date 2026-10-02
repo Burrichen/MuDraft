@@ -9,7 +9,7 @@ describe("tag colour contrast", () => {
           const hex = `#${[r, g, b].map((c) => c.toString(16).padStart(2, "0")).join("")}`;
           expect(contrastRatio(hex, readableTextOn(hex))).toBeGreaterThanOrEqual(4.5);
         }
-    expect(readableTextOn("#f59e0b")).toBe("#000000");
+    expect(readableTextOn("#d4a017")).toBe("#000000");
     expect(readableTextOn("#1d4ed8")).toBe("#ffffff");
   });
 

@@ -417,3 +417,66 @@ fn removal_keeps_history_and_tags_follow_the_album_into_collection() {
     assert_eq!(count(&db, "album_tag"), 1);
     assert_eq!(count(&db, "collection_entry"), 1);
 }
+
+#[test]
+fn stats_drill_downs_filter_by_original_year_decade_and_artist() {
+    let (_d, mut db) = open_temp();
+    let a = artist(&mut db, "Alpha");
+    let b = artist(&mut db, "Beta");
+    add_album(&mut db, "Ninety Four", &a, "1994", &["Rock"]);
+    add_album(&mut db, "Ninety Seven", &b, "1997-05-21", &["Pop"]);
+    add_album(&mut db, "Two Thousand", &a, "2000", &["Rock"]);
+    // An album with an unknown year.
+    let unknown = db
+        .write(|tx| {
+            mudraft_lib::library::catalogue::create_album(
+                tx,
+                None,
+                &mudraft_lib::library::catalogue::NewAlbum {
+                    title: "Undated".into(),
+                    original_date: None,
+                    musicbrainz_release_group_id: None,
+                    credits: vec![common::credit(&b)],
+                    genres: vec![],
+                },
+            )
+        })
+        .unwrap();
+    let (ed, _) = edition(&mut db, &unknown, "Standard", 1);
+    db.write(|tx| personal::add_to_listen_list(tx, &ed))
+        .unwrap();
+
+    let q = |f: fn(&mut ListQuery)| {
+        let mut q = ListQuery {
+            sort: SortOrder::Title,
+            ..ListQuery::default()
+        };
+        f(&mut q);
+        q
+    };
+    assert_eq!(
+        titles(&list(&db, q(|q| q.year = Some(1997)))),
+        ["Ninety Seven"]
+    );
+    assert_eq!(
+        titles(&list(&db, q(|q| q.decade = Some(1990)))),
+        ["Ninety Four", "Ninety Seven"]
+    );
+    assert_eq!(
+        titles(&list(&db, q(|q| q.year_unknown = true))),
+        ["Undated"]
+    );
+    let by_alpha = list(&db, {
+        let mut x = q(|_| {});
+        x.artist_id = Some(a.clone());
+        x.genres = vec!["rock".into()];
+        x
+    });
+    assert_eq!(titles(&by_alpha), ["Ninety Four", "Two Thousand"]);
+    assert_eq!(
+        db.read(|c| listing::query(c, Source::ListenList, &q(|q| q.decade = Some(1995))))
+            .unwrap_err()
+            .code(),
+        "validation"
+    );
+}

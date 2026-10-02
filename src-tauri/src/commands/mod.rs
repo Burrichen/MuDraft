@@ -7,7 +7,11 @@ pub mod library;
 pub mod listening;
 pub mod metadata;
 pub mod next_up;
+pub mod profile;
 pub mod stats;
+
+#[cfg(test)]
+mod journey_tests;
 
 use serde::Serialize;
 use tauri::State;
