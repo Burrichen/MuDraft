@@ -7,15 +7,16 @@
   - Colour correction (spec §1): charcoal/grey tokens, blue accents only, neutral selected surfaces and placeholders, charcoal icon. Listen ASAP defaults to mustard (v11 keeps chosen colours).
   - NSIS per-user installer `MuDraft_<version>_windows_x64_setup.exe` with offline WebView2 (~127 MB). Signing is optional via CI secrets (`docs/WINDOWS.md`).
   - `Windows release` workflow builds the installer on `windows-latest` and runs `scripts/windows/verify-install.ps1`. On a `v*` tag it publishes the release.
+  - Fixed a Listen List race that dropped the search from the URL.
 
 ## Checks run
 
 - macOS 26.6.2: `npm run check` (197 web, 200 Rust), `npm run e2e` 10/10, and a 9-screen × 4 size/zoom sweep with axe (no contrast findings).
-- Windows: see PR #1 / release CI results.
+- Windows (`windows-latest` CI): `npm run check`. The native E2E passes 10/10 through tauri-driver on WebView2 153, run de-elevated (wry#1782). The installer is 210 MB, unsigned. Install, shortcuts, the production data folder, restart, upgrade from 0.9.0 and an uninstall that keeps the profile all pass; screenshots show the grey theme.
 
 ## Unverified
 
-- Theme not inspected on Windows beyond CI screenshots.
+- Windows theme seen only in CI screenshots (start-up and dialog).
 - The WebView2 offline-install path is not exercised, because runners already have WebView2.
 - Manual screen-reader pass.
 

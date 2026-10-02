@@ -13,6 +13,11 @@
 - `core:default` capability is broader than MuDraft uses; narrowing it is a hardening option, not a known issue.
 - List queries are N+1 per album but measured fine at 5,000 albums (below). Re-measure above 20,000.
 
+## Resolved for 1.0.0
+
+- Windows native E2E: 10/10 in CI through tauri-driver. The embedded WebDriver plugin is macOS-only because 1.4.0 doesn't build against Tauri 2.12's WebView2 crates.
+- The installer passes install, upgrade, restart and uninstall checks on a Windows runner (`scripts/windows/verify-install.ps1`).
+
 ## Fixed in this audit
 
 - Restored archive artwork must be a real image (magic bytes). The `artwork:` protocol re-checks name and type before serving.
