@@ -52,6 +52,8 @@ vi.mock("../../services/preferences", async (importOriginal) => ({
       sidebarCollapsed: false,
       lastRoute: "/next-up",
       albumLayout: "grid",
+      startPage: "last",
+      showArtwork: true,
       ...patch,
     }),
   ),
@@ -63,7 +65,7 @@ vi.mock("../../services/health", () => ({
 const ASAP = {
   id: "00000000-0000-7000-8000-000000000001",
   name: "Listen ASAP",
-  color: "#f59e0b",
+  color: "#d4a017",
   builtin: true,
 };
 const ROAD = {

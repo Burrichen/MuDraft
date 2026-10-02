@@ -19,6 +19,10 @@ use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
 async fn pick(app: &AppHandle, save_as: Option<&str>) -> AppResult<Option<PathBuf>> {
+    #[cfg(feature = "e2e")]
+    if let Some(p) = crate::e2e::dialog_path(if save_as.is_some() { "template" } else { "csv" }) {
+        return Ok(Some(p));
+    }
     let (tx, rx) = tokio::sync::oneshot::channel();
     let dialog = app.dialog().file().add_filter("CSV", &["csv"]);
     let done = move |p: Option<tauri_plugin_dialog::FilePath>| {

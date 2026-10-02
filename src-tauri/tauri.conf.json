@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MuDraft",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "app.mudraft.desktop",
   "build": {
     "beforeDevCommand": "npm run web:dev",
@@ -39,9 +39,21 @@
       "minimumSystemVersion": "12.0"
     },
     "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      },
       "nsis": {
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "displayLanguageSelector": false
       }
-    }
+    },
+    "publisher": "MuDraft",
+    "copyright": "Copyright © 2026 MuDraft contributors",
+    "category": "Music",
+    "shortDescription": "Local-first music backlog, album picker, and collection",
+    "longDescription": "MuDraft keeps your Listen List, picks one album to hear next, and records listens, ratings, and reviews on your own computer. No account or server.",
+    "homepage": "https://github.com/Burrichen/MuDraft"
   }
 }

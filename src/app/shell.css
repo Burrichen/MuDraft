@@ -73,8 +73,9 @@
   height: 1.75rem;
   flex: none;
   border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--on-accent);
+  background: var(--surface-raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--accent-indicator);
 }
 
 .shell[data-compact="true"] .brand-name {
@@ -129,9 +130,9 @@
 }
 
 .nav-link.active {
-  background: var(--accent-soft);
+  background: var(--surface-hover);
   color: var(--text);
-  box-shadow: inset 3px 0 0 var(--accent-text);
+  box-shadow: inset 3px 0 0 var(--accent-indicator);
 }
 
 .nav-link:focus-visible {
@@ -408,9 +409,9 @@
   align-items: center;
   gap: var(--space-2) var(--space-3);
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--accent-text);
+  border: 1px solid var(--accent-indicator);
   border-radius: var(--radius);
-  background: var(--accent-soft);
+  background: var(--surface-raised);
 }
 
 .link-button {
@@ -421,4 +422,21 @@
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
+}
+
+.settings-sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-5);
+  color: var(--text-muted);
+}
+
+.show-more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
 }

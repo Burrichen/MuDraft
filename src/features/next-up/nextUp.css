@@ -36,8 +36,8 @@
 }
 
 .method-card[aria-expanded="true"] {
-  border-color: var(--accent-text);
-  background: var(--accent-soft);
+  border-color: var(--accent-indicator);
+  background: var(--surface-raised);
 }
 
 .method-card[aria-disabled="true"] {

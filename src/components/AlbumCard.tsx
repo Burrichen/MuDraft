@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
 import { Link, useLocation } from "react-router";
+import { PreferencesContext } from "../app/preferencesContext";
 import { Artwork } from "./Artwork";
 import { RatingDisplay } from "./Rating";
 import { TagChip } from "./TagChip";
@@ -72,6 +73,8 @@ export function AlbumCard({
   extras?: CardExtras;
 }) {
   const location = useLocation();
+  // Settings → Artwork → "Show artwork"; shown when rendered outside the app shell.
+  const showArtwork = useContext(PreferencesContext)?.prefs.showArtwork ?? true;
   const year = album.year !== null ? String(album.year) : "Year unknown";
   const meta = [year, album.editionBadge === undefined ? album.editionName : null]
     .filter(Boolean)
@@ -92,7 +95,7 @@ export function AlbumCard({
         </label>
       )}
       <Artwork
-        src={album.artworkUrl}
+        src={showArtwork ? album.artworkUrl : null}
         title={album.title}
         size={layout === "grid" ? "card" : "row"}
       />

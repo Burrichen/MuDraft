@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from "react";
+import { usePreferences } from "../../app/preferencesContext";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import {
@@ -14,6 +15,7 @@ import { formatBytes } from "./formatBytes";
 /** Settings → Artwork: the download preference and a separate cache-clear action. */
 export function ArtworkSettings() {
   const version = useLibraryVersion();
+  const { prefs, update } = usePreferences();
   const switchId = useId();
   const [pref, setPref] = useState<ArtworkPreference | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,27 @@ export function ArtworkSettings() {
             setArtworkPreference(allowed).catch((err: unknown) => {
               setError(err instanceof Error ? err.message : String(err));
             });
+          }}
+        />
+      </div>
+      <div className="setting-row">
+        <div className="setting-text">
+          <label className="setting-label" htmlFor={`${switchId}-show`}>
+            Show artwork
+          </label>
+          <span id={`${switchId}-show-hint`} className="setting-hint">
+            When off, cards and album pages show plain placeholders. Nothing is deleted.
+          </span>
+        </div>
+        <input
+          id={`${switchId}-show`}
+          type="checkbox"
+          role="switch"
+          className="switch"
+          aria-describedby={`${switchId}-show-hint`}
+          checked={prefs.showArtwork}
+          onChange={(e) => {
+            update({ showArtwork: e.target.checked });
           }}
         />
       </div>

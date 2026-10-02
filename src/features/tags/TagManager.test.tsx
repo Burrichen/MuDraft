@@ -4,6 +4,10 @@ import { createTag, deleteTag, listTags, updateTag, type TagInfo } from "../../s
 import { renderApp } from "../../test/renderApp";
 import { NativeError } from "../../transport/native";
 
+vi.mock("../../services/metadata", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/metadata")>()),
+  metadataCacheStats: vi.fn(() => Promise.resolve({ entries: 0, bytes: 0, expired: 0 })),
+}));
 vi.mock("../../services/library", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../services/library")>()),
   listTags: vi.fn(),
@@ -18,6 +22,8 @@ vi.mock("../../services/preferences", async (importOriginal) => ({
       sidebarCollapsed: false,
       lastRoute: "/listen-list",
       albumLayout: "grid",
+      startPage: "last",
+      showArtwork: true,
       ...patch,
     }),
   ),
@@ -40,7 +46,7 @@ const TAGS: TagInfo[] = [
   {
     id: "00000000-0000-7000-8000-000000000001",
     name: "Listen ASAP",
-    color: "#f59e0b",
+    color: "#d4a017",
     builtin: true,
     albumCount: 4,
   },

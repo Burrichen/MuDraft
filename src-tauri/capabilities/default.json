@@ -79,6 +79,12 @@
     "allow-artist-catalogue-remove-manual",
     "allow-artist-catalogue-exclude",
     "allow-artist-catalogue-add-to-listen-list",
-    "allow-stats-overview"
+    "allow-stats-overview",
+    "allow-metadata-cache-stats",
+    "allow-metadata-cache-clear",
+    "allow-profile-export",
+    "allow-profile-import-choose",
+    "allow-profile-import-confirm",
+    "allow-profile-import-cancel"
   ]
 }

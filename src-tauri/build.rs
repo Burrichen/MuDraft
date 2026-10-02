@@ -75,6 +75,12 @@ fn main() {
             "artist_catalogue_exclude",
             "artist_catalogue_add_to_listen_list",
             "stats_overview",
+            "metadata_cache_stats",
+            "metadata_cache_clear",
+            "profile_export",
+            "profile_import_choose",
+            "profile_import_confirm",
+            "profile_import_cancel",
         ]),
     ))
     .expect("failed to run tauri-build");

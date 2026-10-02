@@ -22,6 +22,11 @@ export interface ListQuery {
   sort: SortOrder;
   genres: string[];
   tagIds: string[];
+  /** Drill-downs on the canonical album's original year and credits. */
+  year?: number;
+  decade?: number;
+  yearUnknown?: boolean;
+  artistId?: string;
 }
 
 export interface TagRef {
@@ -87,6 +92,10 @@ export async function listLibrary(source: LibrarySource, query: ListQuery): Prom
       sort: query.sort,
       genres: query.genres,
       tagIds: query.tagIds,
+      year: query.year ?? null,
+      decade: query.decade ?? null,
+      yearUnknown: query.yearUnknown ?? false,
+      artistId: query.artistId ?? null,
     },
   });
   if (!isRecord(raw) || !Array.isArray(raw.items) || typeof raw.total !== "number")

@@ -44,6 +44,8 @@ impl Destination {
 pub struct MetadataService {
     provider: Arc<dyn MetadataProvider>,
     requests: RequestRegistry,
+    /// The response cache's own database handle, released during a profile restore.
+    cache: Option<Arc<dyn ResponseCache>>,
 }
 
 impl MetadataService {
@@ -51,12 +53,33 @@ impl MetadataService {
         Self {
             provider,
             requests: RequestRegistry::default(),
+            cache: None,
+        }
+    }
+
+    pub fn suspend_cache(&self) {
+        if let Some(c) = &self.cache {
+            c.suspend();
+        }
+    }
+
+    pub fn resume_cache(&self) {
+        if let Some(c) = &self.cache {
+            c.resume();
         }
     }
 
     /// Production service: native HTTPS, one shared MusicBrainz queue, and the response
     /// cache in the app database (falling back to memory if storage is unavailable).
     pub fn musicbrainz(db_path: Option<&Path>) -> Result<Self, String> {
+        #[cfg(feature = "e2e")]
+        if let Some(fixtures) = crate::e2e::FixtureTransport::from_env() {
+            let cache: Arc<dyn ResponseCache> = Arc::new(MemoryCache::default());
+            return Ok(Self::new(Arc::new(MusicBrainz::new(
+                Arc::new(fixtures),
+                cache,
+            ))));
+        }
         let transport: Arc<dyn Transport> = Arc::new(ReqwestTransport::new()?);
         let cache: Arc<dyn ResponseCache> = match db_path.map(SqliteCache::open) {
             Some(Ok(c)) => Arc::new(c),
@@ -66,7 +89,9 @@ impl MetadataService {
             }
             None => Arc::new(MemoryCache::default()),
         };
-        Ok(Self::new(Arc::new(MusicBrainz::new(transport, cache))))
+        let mut service = Self::new(Arc::new(MusicBrainz::new(transport, cache.clone())));
+        service.cache = Some(cache);
+        Ok(service)
     }
 
     pub fn provider(&self) -> &dyn MetadataProvider {
@@ -156,6 +181,20 @@ pub async fn metadata_editions(
     release_group_id: String,
 ) -> AppResult<Fetched<EditionList>> {
     service.editions(&request_id, &release_group_id).await
+}
+
+/// Size of the saved MusicBrainz responses (used for offline lookups).
+#[tauri::command]
+pub async fn metadata_cache_stats(
+    state: State<'_, AppState>,
+) -> AppResult<crate::metadata::cache::CacheStats> {
+    state.with_db(|db| db.read(crate::metadata::cache::stats))
+}
+
+/// Clear saved MusicBrainz responses; returns how many were removed. Personal data stays.
+#[tauri::command]
+pub async fn metadata_cache_clear(state: State<'_, AppState>) -> AppResult<u32> {
+    state.with_db(|db| db.write(crate::metadata::cache::clear))
 }
 
 #[tauri::command]

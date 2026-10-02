@@ -16,11 +16,11 @@ function initials(title: string): string {
     .toUpperCase();
 }
 
-/** Stable hue per title so placeholders are distinguishable but stay in the slate/blue family. */
+/** Stable hue per title; placeholders are near-neutral grey with only a faint tint. */
 function hue(title: string): number {
   let h = 0;
   for (const ch of title) h = (h * 31 + (ch.codePointAt(0) ?? 0)) % 360;
-  return 200 + (h % 60); // 200–259: cyan through indigo
+  return h;
 }
 
 /**

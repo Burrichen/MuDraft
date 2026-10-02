@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   listLibrary,
@@ -29,6 +29,8 @@ vi.mock("../services/preferences", async (importOriginal) => ({
       sidebarCollapsed: false,
       lastRoute: "/listen-list",
       albumLayout: "grid",
+      startPage: "last",
+      showArtwork: true,
       ...patch,
     }),
   ),
@@ -42,12 +44,19 @@ vi.mock("../services/metadata", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/metadata")>()),
   addManualAlbum: vi.fn(() => Promise.resolve()),
 }));
+vi.mock("../services/album", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/album")>()),
+  artworkUrl: vi.fn((ref: unknown) => (ref ? "artwork://localhost/x" : null)),
+  artworkPreference: vi.fn(() =>
+    Promise.resolve({ allowed: false, cache: { files: 0, bytes: 0 } }),
+  ),
+}));
 vi.mock("../services/health", () => ({ checkHealth: vi.fn(() => new Promise(() => undefined)) }));
 
 const ASAP = {
   id: "00000000-0000-7000-8000-000000000001",
   name: "Listen ASAP",
-  color: "#f59e0b",
+  color: "#d4a017",
   builtin: true,
 };
 const ROAD = {
@@ -400,5 +409,105 @@ describe("Collection", () => {
     });
     await user.click(await screen.findByRole("button", { name: "Undo" }));
     expect(undoLog).toHaveBeenCalledWith(logged.undo);
+  });
+});
+
+describe("Drill-downs from Stats", () => {
+  it("applies year, decade, artist, and genre filters from the link and lets them be cleared", async () => {
+    const user = userEvent.setup();
+    const artist = "0190f5c3-0000-7000-8000-0000000000a1";
+    renderApp(`/collection?decade=1990&genre=Electronic&artist=${artist}`);
+    await screen.findByRole("link", { name: "Homogenic" });
+    expect(lastQuery()).toMatchObject({ decade: 1990, genres: ["Electronic"], artistId: artist });
+    const chips = screen.getByRole("group", { name: "Showing only" });
+    expect(within(chips).getByRole("button", { name: "By Björk ×" })).toBeInTheDocument();
+    await user.click(within(chips).getByRole("button", { name: "Released in the 1990s ×" }));
+    await waitFor(() => {
+      expect(lastQuery()?.decade).toBeUndefined();
+    });
+    expect(lastQuery()?.artistId).toBe(artist);
+    await user.click(screen.getByRole("button", { name: "Clear filters" }));
+    await waitFor(() => {
+      expect(lastQuery()).toMatchObject({ genres: [], tagIds: [] });
+    });
+    expect(lastQuery()?.artistId).toBeUndefined();
+    expect(screen.queryByRole("group", { name: "Showing only" })).not.toBeInTheDocument();
+  });
+
+  it("supports unknown years and sort links", async () => {
+    renderApp("/listen-list?yearUnknown=1&sort=added_oldest");
+    await screen.findByRole("link", { name: "Homogenic" });
+    expect(lastQuery()).toMatchObject({ yearUnknown: true, sort: "added_oldest" });
+    expect(screen.getByRole("button", { name: "Release year unknown ×" })).toBeInTheDocument();
+  });
+
+  it("hides artwork when Show artwork is off", async () => {
+    vi.mocked(listLibrary).mockResolvedValue(
+      result([
+        item(1, {
+          title: "Homogenic",
+          artwork: {
+            ownerType: "edition",
+            ownerId: "0190f5c3-0000-7000-8000-0000000000e1",
+            source: "local",
+            canonicalFallback: false,
+            version: "1",
+          },
+        }),
+      ]),
+    );
+    const { unmount } = renderApp("/listen-list");
+    const card = (await screen.findByRole("link", { name: "Homogenic" })).closest("article");
+    expect(card?.querySelector("img")).not.toBeNull();
+    unmount();
+    renderApp("/listen-list", { showArtwork: false });
+    const hidden = (await screen.findByRole("link", { name: "Homogenic" })).closest("article");
+    expect(hidden?.querySelector("img")).toBeNull();
+  });
+});
+
+describe("Back navigation", () => {
+  it("restores search, sort, and filters after visiting an album", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp("/listen-list");
+    await screen.findByRole("link", { name: "Homogenic" });
+    await user.type(screen.getByRole("searchbox"), "hom");
+    await user.selectOptions(screen.getByLabelText("Sort"), "Album title");
+    await user.click(screen.getByRole("button", { name: /^Electronic/ }));
+    await waitFor(() => {
+      expect(lastQuery()).toMatchObject({ search: "hom", sort: "title", genres: ["Electronic"] });
+    });
+    await user.click(screen.getByRole("link", { name: "Homogenic" }));
+    expect(router.state.location.pathname).toMatch(/^\/albums\//);
+    act(() => {
+      void router.navigate(-1);
+    });
+    await screen.findByRole("link", { name: "Homogenic" });
+    expect(screen.getByRole("searchbox")).toHaveValue("hom");
+    expect(screen.getByLabelText("Sort")).toHaveValue("title");
+    expect(screen.getByRole("button", { name: /^Electronic/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(lastQuery()).toMatchObject({ search: "hom", sort: "title", genres: ["Electronic"] });
+  });
+
+  it("renders large lists in pages and remembers how much was shown", async () => {
+    const user = userEvent.setup();
+    const many = Array.from({ length: 130 }, (_, i) =>
+      item(1, {
+        albumId: `0190f5c3-0000-7000-8000-${String(i).padStart(12, "0")}`,
+        editionId: `0190f5c3-0000-7000-8000-e${String(i).padStart(11, "0")}`,
+        title: `Album ${String(i).padStart(3, "0")}`,
+      }),
+    );
+    vi.mocked(listLibrary).mockResolvedValue(result(many));
+    const { router } = renderApp("/listen-list");
+    await screen.findByRole("link", { name: "Album 000" });
+    expect(screen.getAllByRole("article")).toHaveLength(120);
+    expect(screen.getByText("Showing 120 of 130")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show 10 more" }));
+    expect(screen.getAllByRole("article")).toHaveLength(130);
+    expect(router.state.location.search).toContain("show=240");
   });
 });

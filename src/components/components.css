@@ -124,7 +124,7 @@
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
-  background: var(--slate-800);
+  background: var(--surface-hover);
   color: var(--text);
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
@@ -173,7 +173,7 @@
 }
 
 .dialog::backdrop {
-  background: rgb(2 6 23 / 70%);
+  background: var(--backdrop);
 }
 
 .dialog-header {
@@ -227,8 +227,8 @@
   height: 3.5rem;
   margin-bottom: var(--space-2);
   border-radius: 50%;
-  background: var(--accent-soft);
-  color: var(--accent-text);
+  background: var(--surface-raised);
+  color: var(--text-muted);
 }
 
 .state-error {
@@ -293,8 +293,8 @@
   width: 100%;
   overflow: hidden;
   border-radius: var(--radius);
-  background: var(--slate-900);
-  box-shadow: inset 0 0 0 1px rgb(148 163 184 / 12%);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--artwork-edge);
 }
 
 .artwork[data-size="row"] {
@@ -318,12 +318,8 @@
   gap: var(--space-2);
   width: 100%;
   height: 100%;
-  color: hsl(var(--placeholder-hue) 60% 80%);
-  background: linear-gradient(
-    135deg,
-    hsl(var(--placeholder-hue) 45% 24%),
-    hsl(calc(var(--placeholder-hue) + 20) 40% 14%)
-  );
+  color: hsl(var(--placeholder-hue) 8% 78%);
+  background: hsl(var(--placeholder-hue) 6% 22%);
 }
 
 .artwork-initials {
@@ -424,6 +420,10 @@
 .album-artist-link {
   position: relative;
   z-index: 1;
+  /* A 24px-tall target (WCAG 2.5.8) without changing the line's visual height. */
+  display: inline-block;
+  padding-block: 4px;
+  margin-block: -4px;
   color: inherit;
   text-decoration: none;
 }
@@ -493,7 +493,7 @@
   width: 1.75rem;
   height: 1.75rem;
   border-radius: var(--radius-sm);
-  background: rgb(11 17 32 / 80%);
+  background: rgb(30 30 30 / 85%);
 }
 
 .album-select input {
@@ -509,8 +509,8 @@
 }
 
 .album-card[data-selected="true"] {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent-text);
+  background: var(--surface-hover);
+  box-shadow: inset 0 0 0 1px var(--accent-indicator);
 }
 
 .album-actions {
@@ -617,7 +617,7 @@
 
 .filter-bubble[aria-pressed="true"] {
   background: var(--accent-soft);
-  border-color: var(--accent-text);
+  border-color: var(--accent-indicator);
   color: var(--text);
 }
 
@@ -631,7 +631,7 @@
 .filter-count {
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
-  background: var(--slate-800);
+  background: var(--surface-hover);
   font-size: var(--text-xs);
 }
 
@@ -660,7 +660,7 @@
   height: 0.5rem;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: var(--slate-800);
+  background: var(--surface-hover);
   box-shadow: inset 0 0 0 1px var(--border);
 }
 

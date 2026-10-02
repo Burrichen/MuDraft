@@ -1,0 +1,59 @@
+{
+  "id": "20000000-0000-4000-8000-000000000002",
+  "title": "Homogenic (Deluxe)",
+  "date": "1997-09-22",
+  "country": "GB",
+  "status": "Official",
+  "release-group": {
+    "id": "10000000-0000-4000-8000-000000000001"
+  },
+  "artist-credit": [
+    {
+      "name": "Bj\u00f6rk",
+      "artist": {
+        "id": "87c5dedd-371d-4a53-9f7f-80522fb7f3cb",
+        "name": "Bj\u00f6rk",
+        "sort-name": "Bj\u00f6rk"
+      }
+    }
+  ],
+  "media": [
+    {
+      "position": 1,
+      "format": "CD",
+      "track-count": 3,
+      "tracks": [
+        {
+          "id": "30000000-0000-4000-8000-000000010011",
+          "position": 1,
+          "title": "Hunter",
+          "length": 250000,
+          "recording": {
+            "id": "40000000-0000-4000-8000-000000000001",
+            "title": "Hunter"
+          }
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000010012",
+          "position": 2,
+          "title": "J\u00f3ga",
+          "length": 300000,
+          "recording": {
+            "id": "40000000-0000-4000-8000-000000000002",
+            "title": "J\u00f3ga"
+          }
+        },
+        {
+          "id": "30000000-0000-4000-8000-000000010013",
+          "position": 3,
+          "title": "Bonus Track",
+          "length": 200000,
+          "recording": {
+            "id": "40000000-0000-4000-8000-000000000003",
+            "title": "Bonus Track"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
+import { usePreferences } from "../../app/preferencesContext";
 import { useBack } from "../../app/useBack";
 import { Artwork } from "../../components/Artwork";
 import { Button } from "../../components/Button";
@@ -54,6 +55,7 @@ export function AlbumPage() {
   const [params, setParams] = useSearchParams();
   const editionParam = params.get("edition");
   const { label, goBack } = useBack("/listen-list");
+  const { prefs } = usePreferences();
   const makeNextUp = useMakeNextUp();
   const version = useLibraryVersion();
   const [load, setLoad] = useState<Load>({ kind: "loading" });
@@ -228,7 +230,11 @@ export function AlbumPage() {
 
       <div className="album-hero">
         <figure className="album-art">
-          <Artwork src={artworkUrl(art.current)} title={detail.title} size="hero" />
+          <Artwork
+            src={prefs.showArtwork ? artworkUrl(art.current) : null}
+            title={detail.title}
+            size="hero"
+          />
           <figcaption className="setting-hint">
             {art.removed
               ? "Artwork removed for this edition."

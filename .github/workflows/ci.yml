@@ -47,6 +47,46 @@ jobs:
       - name: Lint, type-check, and test (web + Rust)
         run: npm run check
 
+      # The embedded WebDriver server must never be part of a normal build.
+      - name: Test-only automation is not in the release dependency graph
+        shell: bash
+        run: npm run check:isolation
+
       # Compiles the release app without producing or publishing installers.
       - name: Compile release desktop binary
         run: npm run build:native
+
+  e2e:
+    name: Native end-to-end (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Debug build with `--features e2e`: embeds a WebDriver server, fixtures replace
+      # MusicBrainz and native dialogs. Never shipped.
+      - name: Build the test app
+        run: npm run e2e:build
+
+      - name: Run the native journey
+        run: npm run e2e

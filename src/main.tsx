@@ -4,7 +4,12 @@ import { createHashRouter, RouterProvider } from "react-router";
 import { PreferencesProvider } from "./app/PreferencesProvider";
 import { routes } from "./app/routes";
 import { installTabNavigation } from "./app/tabNavigation";
-import { DEFAULT_PREFERENCES, loadPreferences, type UiPreferences } from "./services/preferences";
+import {
+  DEFAULT_PREFERENCES,
+  loadPreferences,
+  startRoute,
+  type UiPreferences,
+} from "./services/preferences";
 import "./theme/tokens.css";
 import "./components/components.css";
 
@@ -21,9 +26,9 @@ async function bootstrap() {
     loadError = err instanceof Error ? err.message : String(err);
   }
 
-  // A fresh launch has no hash: reopen the page the user was last on.
+  // A fresh launch has no hash: open the chosen start page (or the last page visited).
   if (window.location.hash === "" || window.location.hash === "#/") {
-    window.history.replaceState(null, "", `#${initial.lastRoute}`);
+    window.history.replaceState(null, "", `#${startRoute(initial)}`);
   }
 
   installTabNavigation();

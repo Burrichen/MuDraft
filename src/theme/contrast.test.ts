@@ -47,18 +47,39 @@ const PAIRS: [string, string, number][] = [
   ["text-subtle", "surface", 4.5],
   ["accent-text", "bg", 4.5],
   ["accent-text", "surface", 4.5],
+  ["accent-text", "surface-raised", 4.5],
+  ["accent-text", "surface-hover", 4.5],
+  ["text-subtle", "surface-raised", 4.5],
   ["on-accent", "accent", 4.5],
   ["on-accent", "accent-hover", 4.5],
   ["focus-ring", "bg", 3],
   ["focus-ring", "surface-hover", 3],
+  ["focus-ring", "surface-raised", 3],
+  ["accent-indicator", "surface-hover", 3],
+  ["accent-indicator", "surface-raised", 3],
+  ["accent", "bg", 3],
   ["danger", "bg", 4.5],
   ["warning", "bg", 4.5],
   ["star", "bg", 3],
-  ["border-strong", "bg", 1.5],
+  ["star-empty", "bg", 3],
+  ["border-strong", "bg", 3],
+  ["border-strong", "surface", 3],
 ];
+
+// Grey application, blue accents: large surfaces stay neutral (R, G, B within a few steps).
+const NEUTRAL = ["bg", "bg-sidebar", "surface", "surface-raised", "surface-hover", "border"];
 
 describe("palette contrast (WCAG 2.2)", () => {
   it.each(PAIRS)("--%s on --%s ≥ %s:1", (fg, bg, min) => {
     expect(contrast(fg, bg)).toBeGreaterThanOrEqual(min);
+  });
+});
+
+describe("neutral surfaces", () => {
+  it.each(NEUTRAL)("--%s is grey, not tinted blue", (name) => {
+    const hex = resolve(name);
+    const n = parseInt(hex.slice(1), 16);
+    const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(8);
   });
 });

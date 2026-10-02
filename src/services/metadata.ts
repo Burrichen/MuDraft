@@ -230,3 +230,27 @@ export async function genreVocabulary(): Promise<string[]> {
     throw invalid("Genre vocabulary");
   return raw;
 }
+
+export interface MetadataCacheStats {
+  entries: number;
+  bytes: number;
+  expired: number;
+}
+
+/** Saved MusicBrainz responses (used for offline lookups). */
+export async function metadataCacheStats(): Promise<MetadataCacheStats> {
+  const raw = await callNative("metadata_cache_stats");
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    typeof (raw as MetadataCacheStats).entries !== "number"
+  )
+    throw new NativeError("invalid_response", "Cache details had an unexpected shape");
+  return raw as MetadataCacheStats;
+}
+
+/** Forget saved MusicBrainz responses; your library, ratings, and listens are kept. */
+export async function clearMetadataCache(): Promise<number> {
+  const raw = await callNative("metadata_cache_clear");
+  return typeof raw === "number" ? raw : 0;
+}
