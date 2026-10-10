@@ -126,8 +126,8 @@ describe("MatchDialog", () => {
     expect(await screen.findByRole("radiogroup", { name: /Edition of/ })).toBeInTheDocument();
     expect(add).toHaveAccessibleDescription("Choose the edition you have or plan to hear.");
 
-    await userEvent.click(screen.getByRole("radio", { name: /GB · CD · 12 tracks/ }));
-    await userEvent.type(screen.getByLabelText("Edition name in MuDraft (optional)"), "UK CD");
+    await userEvent.click(screen.getByRole("radio", { name: /1997-06 · 12 tracks/ }));
+    await userEvent.type(screen.getByLabelText("Edition name in MuDraft (optional)"), "Standard");
     expect(add).not.toHaveAttribute("aria-disabled");
     await userEvent.click(add);
     expect(onConfirm).toHaveBeenCalledWith(
@@ -135,7 +135,7 @@ describe("MatchDialog", () => {
         kind: "musicbrainz",
         releaseGroupId: RG,
         releaseId: REL,
-        editionName: "UK CD",
+        editionName: "Standard",
       }),
     );
   });

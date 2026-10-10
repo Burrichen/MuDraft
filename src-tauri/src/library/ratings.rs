@@ -80,6 +80,70 @@ pub fn set_favourite(tx: &Transaction<'_>, track_id: &str, favourite: bool) -> A
     personal::set_track_favourite(tx, &parse_uuid("track", track_id)?, favourite)
 }
 
+/// A track the user liked (the heart), wherever its album is in the library.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LikedTrack {
+    pub track_id: String,
+    pub title: String,
+    pub length_ms: Option<i64>,
+    pub album_id: String,
+    pub album_title: String,
+    pub credit: String,
+    pub edition_name: String,
+}
+
+/// Every liked track, by artist credit, album, edition, then tracklist order.
+pub fn liked_tracks(conn: &Connection) -> AppResult<Vec<LikedTrack>> {
+    let mut credits: HashMap<String, String> = HashMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT c.album_id, COALESCE(c.credited_name, ar.name), c.join_phrase
+         FROM album_artist_credit c JOIN artist ar ON ar.id = c.artist_id
+         WHERE c.album_id IN (SELECT e.album_id FROM track_rating tr
+             JOIN track t ON t.id = tr.track_id JOIN edition e ON e.id = t.edition_id
+             WHERE tr.is_favourite = 1)
+         ORDER BY c.album_id, c.position",
+    )?;
+    for row in stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+        ))
+    })? {
+        let (album, name, join) = row?;
+        credits
+            .entry(album)
+            .or_default()
+            .push_str(&format!("{name}{join}"));
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT t.id, t.title, t.length_ms, e.album_id, a.title, e.name FROM track_rating tr
+         JOIN track t ON t.id = tr.track_id JOIN edition e ON e.id = t.edition_id
+         JOIN album a ON a.id = e.album_id
+         WHERE tr.is_favourite = 1
+         ORDER BY a.title COLLATE NOCASE, e.name, t.disc_number, t.position",
+    )?;
+    let mut out: Vec<LikedTrack> = stmt
+        .query_map([], |r| {
+            let album_id: String = r.get(3)?;
+            Ok(LikedTrack {
+                track_id: r.get(0)?,
+                title: r.get(1)?,
+                length_ms: r.get(2)?,
+                credit: credits.get(&album_id).cloned().unwrap_or_default(),
+                album_id,
+                album_title: r.get(4)?,
+                edition_name: r.get(5)?,
+            })
+        })?
+        .collect::<Result<_, _>>()?;
+    // Stable: keeps album and tracklist order within each artist.
+    out.sort_by_key(|t| t.credit.to_lowercase());
+    Ok(out)
+}
+
 /// Set or clear the explicit album rating for an edition. Track ratings are untouched;
 /// clearing restores the calculated value.
 pub fn set_album(

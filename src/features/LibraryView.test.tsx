@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import {
   listLibrary,
   listTags,
+  removeFromCollection,
   removeFromListenList,
   updateAlbumTags,
   type ListItem,
@@ -19,6 +20,7 @@ vi.mock("../services/library", async (importOriginal) => ({
   listLibrary: vi.fn(),
   listTags: vi.fn(),
   removeFromListenList: vi.fn(),
+  removeFromCollection: vi.fn(() => Promise.resolve(1)),
   updateAlbumTags: vi.fn(),
   createTag: vi.fn(),
 }));
@@ -310,7 +312,7 @@ describe("Listen List", () => {
 });
 
 describe("Collection", () => {
-  it("shows the same album-level tags without Listen List removal", async () => {
+  it("shows the same album-level tags without Listen List actions", async () => {
     renderApp("/collection");
     expect(await screen.findByRole("list", { name: "Tags on Homogenic" })).toHaveTextContent(
       "Road trip",
@@ -319,7 +321,24 @@ describe("Collection", () => {
     expect(
       screen.queryByRole("button", { name: /Remove .* from Listen List/ }),
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Mark Homogenic listened" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit tags for Homogenic" })).toBeInTheDocument();
+  });
+
+  it("removes an album from the Collection only after confirming", async () => {
+    renderApp("/collection");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Remove Homogenic from Collection" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Remove from Collection?" });
+    expect(dialog).toHaveTextContent("tags, ratings, reviews, and listening history");
+    expect(removeFromCollection).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
+    expect(removeFromCollection).toHaveBeenCalledWith([ITEMS[0]?.albumId]);
+    expect(removeFromListenList).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Removed “Homogenic” from your Collection/)).toBeInTheDocument();
   });
 
   it("shows listening dates and counts, transparently, with a Recently listened sort", async () => {
@@ -381,7 +400,7 @@ describe("Collection", () => {
     expect(await screen.findByText(/Added “Basement Demo” to your Collection/)).toBeInTheDocument();
   });
 
-  it("marks an album listened from its card, with undo", async () => {
+  it("marks an album listened from its Listen List card, with undo", async () => {
     const logged = {
       listenId: "l1",
       isFull: true,
@@ -400,7 +419,7 @@ describe("Collection", () => {
     };
     vi.mocked(logListen).mockResolvedValue(logged);
     const user = userEvent.setup();
-    renderApp("/collection");
+    renderApp("/listen-list");
     await user.click(await screen.findByRole("button", { name: "Mark Homogenic listened" }));
     await user.click(screen.getByRole("button", { name: "Mark listened" }));
     expect(vi.mocked(logListen).mock.calls[0]?.[1]).toMatchObject({

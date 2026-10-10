@@ -3,6 +3,7 @@ import { AlbumPage } from "../features/album/AlbumPage";
 import { ArtistPage } from "../features/artist/ArtistPage";
 import { CollectionPage } from "../features/collection/CollectionPage";
 import { CsvImportPage } from "../features/import/CsvImportPage";
+import { LikedPage } from "../features/liked/LikedPage";
 import { ListenListPage } from "../features/listen-list/ListenListPage";
 import { NextUpPage } from "../features/next-up/NextUpPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
@@ -19,6 +20,7 @@ export const routes: RouteObject[] = [
       { path: "listen-list/import", element: <CsvImportPage /> },
       { path: "next-up", element: <NextUpPage /> },
       { path: "collection", element: <CollectionPage /> },
+      { path: "liked", element: <LikedPage /> },
       { path: "stats", element: <StatsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "albums/:albumId", element: <AlbumPage /> },

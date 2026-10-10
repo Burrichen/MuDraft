@@ -1,4 +1,5 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { notifyLibraryChanged } from "../../services/libraryEvents";
 import { statsOverview, type Best, type Stats } from "../../services/stats";
 import { renderApp } from "../../test/renderApp";
@@ -209,6 +210,23 @@ describe("Stats page", () => {
     const best = await screen.findByRole("region", { name: "Best artist" });
     expect(best).toHaveTextContent("Alpha and Beta");
     expect(best).toHaveTextContent("3 of 5 stars each — tied, 2 rated albums and 1 rated album.");
+  });
+
+  it("charts ratings in half-star buckets and shows any chart as a table on request", async () => {
+    const user = userEvent.setup();
+    renderApp("/stats");
+    const ratings = await screen.findByRole("figure", { name: "Rating distribution" });
+    const table = within(ratings).getByRole("table", { hidden: true });
+    expect(table.parentElement).toHaveClass("visually-hidden");
+    expect(
+      within(table).getByRole("row", { name: "0 to under 0.5 stars 1 album" }),
+    ).toBeInTheDocument();
+    const toggle = within(ratings).getByRole("button", { name: "Table" });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    expect(within(ratings).getByRole("table").parentElement).not.toHaveClass("visually-hidden");
+    expect(screen.getByRole("figure", { name: "Listening activity" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Liked tracks/ })).toHaveAttribute("href", "/liked");
   });
 
   it("is honest about empty data", async () => {

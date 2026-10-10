@@ -50,8 +50,8 @@ export function Tracklist({
                         type="button"
                         className="mini-button favourite-button"
                         aria-pressed={t.favourite}
-                        aria-label={`Favourite: ${t.title}`}
-                        title={t.favourite ? "Favourite track" : "Mark as favourite"}
+                        aria-label={`Like: ${t.title}`}
+                        title={t.favourite ? "Liked" : "Like"}
                         onClick={() => {
                           onFavourite(t.id, !t.favourite);
                         }}

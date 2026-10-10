@@ -11,6 +11,7 @@ import {
   type SwitchPreview,
 } from "../../services/album";
 import { formatRating } from "../../components/ratingFormat";
+import { collapseEditions, editionLabel } from "../match/editionGroups";
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -49,7 +50,7 @@ export function AddEditionDialog({
     const controller = new AbortController();
     editionCandidates(albumId, controller.signal).then(
       (r) => {
-        setChoices(r.value);
+        setChoices(collapseEditions(r.value, (c) => c.inLibraryAs !== null));
       },
       (err: unknown) => {
         if (code(err) !== "cancelled") setLoadError({ code: code(err), message: message(err) });
@@ -116,14 +117,10 @@ export function AddEditionDialog({
               Releases
             </span>
             {choices.map((c) => {
-              const facts = [
-                c.date.value ?? "Date unknown",
-                c.country,
-                c.formats.join(" + ") || null,
-                `${String(c.trackCount)} tracks`,
-              ]
-                .filter(Boolean)
-                .join(" · ");
+              const facts = [c.date.value ?? "Date unknown", `${String(c.trackCount)} tracks`].join(
+                " · ",
+              );
+              const label = editionLabel(c.disambiguation);
               return (
                 <label
                   key={c.id}
@@ -140,15 +137,13 @@ export function AddEditionDialog({
                     onChange={() => {
                       setPicked(c.id);
                       setError(null);
-                      if (!name && c.disambiguation) setName(c.disambiguation);
+                      if (!name && label) setName(label);
                     }}
                   />
                   <span className="match-option-body">
                     <span className="match-option-title">
                       {c.title}
-                      {c.disambiguation && (
-                        <span className="match-muted"> ({c.disambiguation})</span>
-                      )}
+                      {label && <span className="match-muted"> ({label})</span>}
                     </span>
                     <span className="match-option-meta">{facts}</span>
                     {c.inLibraryAs && (
@@ -236,7 +231,7 @@ export function SwitchEditionDialog({
   const describe = (rating: number | null, favourite: boolean, listened = false) =>
     [
       rating !== null ? formatRating(rating) : null,
-      favourite ? "favourite" : null,
+      favourite ? "liked" : null,
       listened ? "listened" : null,
     ]
       .filter(Boolean)
@@ -295,7 +290,7 @@ export function SwitchEditionDialog({
                         setCopy(e.target.checked);
                       }}
                     />
-                    Copy {copyable.length} rating{copyable.length === 1 ? "" : "s"} or favourite
+                    Copy {copyable.length} rating{copyable.length === 1 ? "" : "s"} or like
                     {copyable.length === 1 ? "" : "s"} to the matching tracks
                   </label>
                 )}

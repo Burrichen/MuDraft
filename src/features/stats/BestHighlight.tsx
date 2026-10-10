@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import type { Best } from "../../services/stats";
+import { StarMeter } from "./charts";
 import { formatStars, plural } from "./format";
 
 /**
@@ -18,6 +19,7 @@ export function BestHighlight({
   /** e.g. "with an unknown year". */
   unplaced?: string;
 }) {
+  const stars = best.winners[0]?.meanStars ?? 0;
   return (
     <section className="best" aria-label={title}>
       <h4 className="best-title">{title}</h4>
@@ -33,8 +35,12 @@ export function BestHighlight({
               </span>
             ))}
           </p>
+          <div className="best-score">
+            <span className="best-stars-number">{Math.round(stars * 10) / 10}</span>
+            <StarMeter stars={stars} />
+          </div>
           <p className="setting-hint">
-            {formatStars(best.winners[0]?.meanStars ?? 0)}
+            {formatStars(stars)}
             {best.winners.length > 1
               ? ` each — tied, ${best.winners.map((w) => plural(w.albums, "rated album")).join(" and ")}`
               : ` from ${plural(best.winners[0]?.albums ?? 0, "rated album")}`}

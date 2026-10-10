@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 /** One overview number. With `href`, the whole card opens the matching albums. */
@@ -8,7 +9,7 @@ export function StatCard({
   href,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   hint?: string | undefined;
   href?: string | undefined;
 }) {
