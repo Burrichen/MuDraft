@@ -456,7 +456,7 @@ fn upsert_edition(
 }
 
 /// "Standard" for an album's first edition; otherwise the release's disambiguation or a
-/// format · country · year summary, made unique.
+/// "<year> edition", made unique.
 fn default_edition_name(
     tx: &Transaction<'_>,
     album_id: &str,
@@ -471,18 +471,10 @@ fn default_edition_name(
     } else if let Some(d) = &rel.disambiguation {
         d.clone()
     } else {
-        let parts: Vec<String> = [
-            (!rel.formats.is_empty()).then(|| rel.formats.join(" + ")),
-            rel.country.clone(),
-            rel.date.year.map(|y| y.to_string()),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        if parts.is_empty() {
-            "Edition".into()
-        } else {
-            parts.join(" · ")
+        // Editions differ by content, not by format or country.
+        match rel.date.year {
+            Some(y) => format!("{y} edition"),
+            None => "Edition".into(),
         }
     };
     let mut name = base.clone();

@@ -442,3 +442,22 @@ pub fn remove_from_listen_list(tx: &Transaction<'_>, album_ids: &[String]) -> Ap
     }
     Ok(removed)
 }
+
+/// Returns how many albums left the Collection.
+pub fn remove_from_collection(tx: &Transaction<'_>, album_ids: &[String]) -> AppResult<u32> {
+    if album_ids.is_empty() {
+        return Err(AppError::validation("albums", "select at least one album"));
+    }
+    let mut removed = 0;
+    for id in album_ids {
+        let id = parse_uuid("album", id)?;
+        if tx.execute(
+            "DELETE FROM collection_entry WHERE album_id = ?1",
+            params![id],
+        )? > 0
+        {
+            removed += 1;
+        }
+    }
+    Ok(removed)
+}

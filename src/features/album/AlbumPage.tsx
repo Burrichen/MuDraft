@@ -23,6 +23,7 @@ import {
   type AlbumDetail,
   type EditionView,
 } from "../../services/album";
+import { removeFromCollection } from "../../services/library";
 import { useLibraryVersion } from "../../services/libraryEvents";
 import { TagPicker } from "../tags/TagPicker";
 import { EditAlbumDialog } from "./EditAlbumDialog";
@@ -69,6 +70,7 @@ export function AlbumPage() {
   const [newName, setNewName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const tagButton = useRef<HTMLButtonElement | null>(null);
   const valid = UUID.test(albumId);
 
@@ -154,6 +156,7 @@ export function AlbumPage() {
 
   const edition = detail.editions.find((e) => e.id === detail.editionId);
   const listEdition = detail.editions.find((e) => e.onListenList);
+  const inCollection = detail.editions.some((e) => e.inCollection);
   const art = detail.artwork;
   const linked = detail.musicbrainzReleaseGroupId !== null;
   const showBadge =
@@ -183,6 +186,15 @@ export function AlbumPage() {
             >
               Edit details
             </Button>
+            {inCollection && (
+              <Button
+                onClick={() => {
+                  setConfirmingRemove(true);
+                }}
+              >
+                Remove from Collection
+              </Button>
+            )}
             <Button
               disabledReason={
                 !linked
@@ -567,6 +579,40 @@ export function AlbumPage() {
             }}
           />
         </div>
+      </Dialog>
+
+      <Dialog
+        open={confirmingRemove}
+        title="Remove from Collection?"
+        onClose={() => {
+          setConfirmingRemove(false);
+        }}
+        actions={
+          <>
+            <Button
+              onClick={() => {
+                setConfirmingRemove(false);
+              }}
+            >
+              Keep
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() =>
+                void run(async () => {
+                  setConfirmingRemove(false);
+                  await removeFromCollection([detail.albumId]);
+                  return "Removed from your Collection. Reviews, listens and tags are kept.";
+                })
+              }
+            >
+              Remove
+            </Button>
+          </>
+        }
+      >
+        “{detail.title}” will leave your Collection. The album stays in your library with its tags,
+        ratings, reviews, and listening history.
       </Dialog>
     </section>
   );

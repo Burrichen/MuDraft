@@ -11,6 +11,7 @@ import { Popover } from "../components/Popover";
 import { EmptyState, ErrorState, LoadingState } from "../components/States";
 import {
   listLibrary,
+  removeFromCollection,
   removeFromListenList,
   type LibrarySource,
   type ListItem,
@@ -285,16 +286,17 @@ export function LibraryView({
     });
   };
 
+  const listName = isListen ? "Listen List" : "Collection";
   const confirmRemove = async () => {
     if (!removing) return;
     setActionError(null);
     try {
-      const n = await removeFromListenList(removing.albumIds);
+      const n = await (isListen ? removeFromListenList : removeFromCollection)(removing.albumIds);
       setStatus(
-        `Removed ${removing.label} from your Listen List. Reviews, listens and tags are kept.`,
+        `Removed ${removing.label} from your ${listName}. Reviews, listens and tags are kept.`,
       );
       setSelected(new Set());
-      if (n === 0) setStatus("Those albums were already off your Listen List.");
+      if (n === 0) setStatus(`Those albums were already out of your ${listName}.`);
     } catch (err) {
       setActionError(errorInfo(err).message);
     } finally {
@@ -335,19 +337,21 @@ export function LibraryView({
       ? {
           actions: (
             <>
-              <Button
-                variant="ghost"
-                className="button-small"
-                aria-label={`Mark ${album.title} listened`}
-                onClick={() => {
-                  const item = items.find(
-                    (i) => i.albumId === album.albumId && i.editionId === album.editionId,
-                  );
-                  if (item) setListening(item);
-                }}
-              >
-                Mark listened
-              </Button>
+              {isListen && (
+                <Button
+                  variant="ghost"
+                  className="button-small"
+                  aria-label={`Mark ${album.title} listened`}
+                  onClick={() => {
+                    const item = items.find(
+                      (i) => i.albumId === album.albumId && i.editionId === album.editionId,
+                    );
+                    if (item) setListening(item);
+                  }}
+                >
+                  Mark listened
+                </Button>
+              )}
               {isListen && album.editionId && (
                 <Button
                   variant="ghost"
@@ -360,18 +364,16 @@ export function LibraryView({
                   Make Next Up
                 </Button>
               )}
-              {isListen && (
-                <Button
-                  variant="ghost"
-                  className="button-small"
-                  aria-label={`Remove ${album.title} from Listen List`}
-                  onClick={() => {
-                    setRemoving({ albumIds: [album.albumId], label: `“${album.title}”` });
-                  }}
-                >
-                  Remove
-                </Button>
-              )}
+              <Button
+                variant="ghost"
+                className="button-small"
+                aria-label={`Remove ${album.title} from ${listName}`}
+                onClick={() => {
+                  setRemoving({ albumIds: [album.albumId], label: `“${album.title}”` });
+                }}
+              >
+                Remove
+              </Button>
             </>
           ),
         }
@@ -620,20 +622,18 @@ export function LibraryView({
               >
                 Tag…
               </Button>
-              {isListen && (
-                <Button
-                  variant="danger"
-                  disabledReason={selectedIds.length === 0 ? "Select albums first." : undefined}
-                  onClick={() => {
-                    setRemoving({
-                      albumIds: selectedIds,
-                      label: `${String(selectedIds.length)} albums`,
-                    });
-                  }}
-                >
-                  Remove from Listen List
-                </Button>
-              )}
+              <Button
+                variant="danger"
+                disabledReason={selectedIds.length === 0 ? "Select albums first." : undefined}
+                onClick={() => {
+                  setRemoving({
+                    albumIds: selectedIds,
+                    label: `${String(selectedIds.length)} albums`,
+                  });
+                }}
+              >
+                Remove from {listName}
+              </Button>
             </div>
           )}
         </div>
@@ -698,7 +698,7 @@ export function LibraryView({
 
       <Dialog
         open={removing !== null}
-        title="Remove from Listen List?"
+        title={`Remove from ${listName}?`}
         onClose={() => {
           setRemoving(null);
         }}
@@ -717,8 +717,8 @@ export function LibraryView({
           </>
         }
       >
-        {removing?.label} will leave your Listen List. The album stays in your library with its
-        tags, ratings, reviews, and listening history.
+        {removing?.label} will leave your {listName}. The album stays in your library with its tags,
+        ratings, reviews, and listening history.
       </Dialog>
 
       <MatchDialog
@@ -733,7 +733,7 @@ export function LibraryView({
           setStatus(
             isListen
               ? `Added “${name}” to your Listen List.`
-              : `Added “${name}” to your Collection. Log a listen from its card or album page when you like.`,
+              : `Added “${name}” to your Collection. Log a listen from its album page when you like.`,
           );
           setAddOpen(false);
         }}

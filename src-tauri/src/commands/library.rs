@@ -25,6 +25,16 @@ pub async fn listen_list_remove(
     state.with_db(|db| db.write(|tx| listing::remove_from_listen_list(tx, &album_ids)))
 }
 
+/// Remove albums (every edition) from the Collection only; listens, ratings, reviews and
+/// tags stay.
+#[tauri::command]
+pub async fn collection_remove_albums(
+    state: State<'_, AppState>,
+    album_ids: Vec<String>,
+) -> AppResult<u32> {
+    state.with_db(|db| db.write(|tx| listing::remove_from_collection(tx, &album_ids)))
+}
+
 #[tauri::command]
 pub async fn tags_list(state: State<'_, AppState>) -> AppResult<Vec<TagInfo>> {
     state.with_db(|db| db.read(tags::list))

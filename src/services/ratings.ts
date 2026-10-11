@@ -57,9 +57,28 @@ export async function setAlbumRating(
   return s;
 }
 
+/** The heart on a track: liked or not. Stored natively as `is_favourite`. */
 export async function setFavourite(trackId: string, favourite: boolean): Promise<void> {
   await callNative("track_set_favourite", { trackId, favourite });
   notifyLibraryChanged();
+}
+
+/** Mirrors `LikedTrack` in `src-tauri/src/library/ratings.rs`. */
+export interface LikedTrack {
+  trackId: string;
+  title: string;
+  lengthMs: number | null;
+  albumId: string;
+  albumTitle: string;
+  credit: string;
+  editionName: string;
+}
+
+export async function likedTracks(): Promise<LikedTrack[]> {
+  const raw = await callNative("liked_tracks");
+  if (!Array.isArray(raw))
+    throw new NativeError("invalid_response", "Liked tracks had an unexpected shape");
+  return raw as LikedTrack[];
 }
 
 export async function setReview(editionId: string, review: string | null): Promise<void> {

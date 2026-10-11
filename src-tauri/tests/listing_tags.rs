@@ -416,6 +416,23 @@ fn removal_keeps_history_and_tags_follow_the_album_into_collection() {
     assert_eq!(count(&db, "listen_event"), 1);
     assert_eq!(count(&db, "album_tag"), 1);
     assert_eq!(count(&db, "collection_entry"), 1);
+
+    // Leaving the Collection keeps the same personal data.
+    assert_eq!(
+        db.write(|tx| listing::remove_from_collection(tx, std::slice::from_ref(&al)))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        db.write(|tx| listing::remove_from_collection(tx, std::slice::from_ref(&al)))
+            .unwrap(),
+        0
+    );
+    assert_eq!(count(&db, "collection_entry"), 0);
+    assert_eq!(count(&db, "listen_event"), 1);
+    assert_eq!(count(&db, "album_tag"), 1);
+    let review = db.read(|c| personal::album_review(c, &deluxe)).unwrap();
+    assert_eq!(review.review.as_deref(), Some("Great."));
 }
 
 #[test]

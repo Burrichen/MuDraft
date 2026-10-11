@@ -6,11 +6,12 @@ export interface NavItem {
   icon: IconName;
 }
 
-/** The five primary sections. Album and Artist pages are nested, not listed here. */
+/** The primary sections. Album and Artist pages are nested, not listed here. */
 export const NAV_ITEMS: readonly NavItem[] = [
   { path: "/listen-list", label: "Listen List", icon: "listenList" },
   { path: "/next-up", label: "Next Up", icon: "nextUp" },
   { path: "/collection", label: "Collection", icon: "collection" },
+  { path: "/liked", label: "Liked", icon: "liked" },
   { path: "/stats", label: "Stats", icon: "stats" },
   { path: "/settings", label: "Settings", icon: "settings" },
 ];

@@ -167,6 +167,27 @@ fn rating_favouriting_and_reviews_never_mark_anything_listened() {
 }
 
 #[test]
+fn liked_tracks_lists_hearted_tracks_from_any_album() {
+    let (_d, mut db) = open_temp();
+    let (al, _ed, t) = setup(&mut db, "Quiet", 3);
+    // Not in the Collection or Listen List: liked tracks still show.
+    db.write(|tx| {
+        ratings::set_favourite(tx, &t[2], true)?;
+        ratings::set_favourite(tx, &t[0], true)?;
+        ratings::set_favourite(tx, &t[1], true)?;
+        ratings::set_favourite(tx, &t[1], false)
+    })
+    .unwrap();
+    let liked = db.read(ratings::liked_tracks).unwrap();
+    let titles: Vec<&str> = liked.iter().map(|l| l.title.as_str()).collect();
+    assert_eq!(titles, ["Track 1", "Track 3"]);
+    assert_eq!(liked[0].album_id, al);
+    assert_eq!(liked[0].album_title, "Quiet");
+    assert_eq!(liked[0].credit, "Artist");
+    assert_eq!(liked[0].edition_name, "Standard");
+}
+
+#[test]
 fn cards_and_sorting_use_the_same_calculation() {
     let (_d, mut db) = open_temp();
     let (_, high, ht) = setup(&mut db, "High", 2);

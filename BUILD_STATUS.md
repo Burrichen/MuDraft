@@ -8,8 +8,11 @@
   - NSIS per-user installer `MuDraft_<version>_windows_x64_setup.exe` with offline WebView2 (~127 MB). Signing is optional via CI secrets (`docs/WINDOWS.md`).
   - `Windows release` workflow builds the installer on `windows-latest` and runs `scripts/windows/verify-install.ps1`. On a `v*` tag it publishes the release.
   - Fixed a Listen List race that dropped the search from the URL.
+- **1.1.0**: Collection cards drop "Mark listened" and gain Remove (`collection_remove_albums`), and the album page has "Remove from Collection". Edition pickers show one entry per edition, not per format or country (`editionGroups.ts`). The heart now means "Liked", with a Liked tab (`liked_tracks`). Stats shows only a count and a link. Stats page redesigned: hero figure, KPI tiles, hand-built HTML column/stacked/bar charts with hover tips and a table toggle (`charts.tsx`).
 
 ## Checks run
+
+- 1.1.0 on Windows 11: `npm run check` (212 web, all Rust passing). Stats checked by screenshot with sample data at 1440 and 600 px. E2E not run.
 
 - macOS 26.6.2: `npm run check` (198 web, 200 Rust), `npm run e2e` 10/10, and a 9-screen × 4 size/zoom sweep with axe (no contrast findings).
 - Windows (`windows-latest` CI): `npm run check`. The native E2E passes 10/10 through tauri-driver on WebView2 153, run de-elevated (wry#1782). The installer is 210 MB, unsigned. Install, shortcuts, the production data folder, restart, upgrade from 0.9.0 and an uninstall that keeps the profile all pass; screenshots show the grey theme.

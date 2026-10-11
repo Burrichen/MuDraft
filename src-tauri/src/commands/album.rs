@@ -386,6 +386,13 @@ pub async fn track_set_favourite(
 }
 
 #[tauri::command]
+pub async fn liked_tracks(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<crate::library::ratings::LikedTrack>> {
+    state.with_db(|db| db.read(crate::library::ratings::liked_tracks))
+}
+
+#[tauri::command]
 pub async fn album_review_set(
     state: State<'_, AppState>,
     edition_id: String,

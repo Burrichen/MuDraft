@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-liked-tracks"
+description = "Enables the liked_tracks command without any pre-configured scope."
+commands.allow = ["liked_tracks"]
+
+[[permission]]
+identifier = "deny-liked-tracks"
+description = "Denies the liked_tracks command without any pre-configured scope."
+commands.deny = ["liked_tracks"]

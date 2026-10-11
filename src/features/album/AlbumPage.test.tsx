@@ -14,6 +14,7 @@ import {
   unlockField,
   type AlbumDetail,
 } from "../../services/album";
+import { removeFromCollection } from "../../services/library";
 import { renderApp } from "../../test/renderApp";
 import { NativeError } from "../../transport/native";
 import { setAlbumRating, setFavourite, setReview, setTrackRating } from "../../services/ratings";
@@ -42,6 +43,10 @@ vi.mock("../../services/ratings", async (importOriginal) => ({
   setTrackRating: vi.fn(() => Promise.resolve()),
   setFavourite: vi.fn(() => Promise.resolve()),
   setReview: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("../../services/library", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/library")>()),
+  removeFromCollection: vi.fn(() => Promise.resolve(1)),
 }));
 vi.mock("../../services/preferences", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../services/preferences")>()),
@@ -328,9 +333,20 @@ describe("Album page", () => {
           inLibraryAs: "Standard",
         },
         {
+          id: "r2",
+          title: "OK Computer",
+          disambiguation: "180g vinyl",
+          date: { value: "2008", precision: "year", year: 2008 },
+          country: "US",
+          status: "Official",
+          formats: ['12" Vinyl'],
+          trackCount: 12,
+          inLibraryAs: null,
+        },
+        {
           id: "r3",
           title: "OK Computer",
-          disambiguation: "US pressing",
+          disambiguation: "Remastered",
           date: { value: "1997", precision: "year", year: 1997 },
           country: "US",
           status: "Official",
@@ -349,14 +365,26 @@ describe("Album page", () => {
     renderApp(`/albums/${ALBUM}`);
     await userEvent.click(await screen.findByRole("button", { name: "Add another edition…" }));
     const dialog = await screen.findByRole("dialog", { name: "Add an edition of “OK Computer”" });
-    const existing = await within(dialog).findByRole("radio", { name: /GB/ });
+    // The vinyl pressing of the Standard edition is not offered separately.
+    expect(await within(dialog).findAllByRole("radio")).toHaveLength(2);
+    const existing = within(dialog).getByRole("radio", { name: /Already in your library/ });
     expect(existing).toBeDisabled();
     expect(existing).toHaveAccessibleDescription("Already in your library as “Standard”.");
-    await userEvent.click(within(dialog).getByRole("radio", { name: /US pressing/ }));
-    expect(within(dialog).getByLabelText("Edition name")).toHaveValue("US pressing");
+    await userEvent.click(within(dialog).getByRole("radio", { name: /Remastered/ }));
+    expect(within(dialog).getByLabelText("Edition name")).toHaveValue("Remastered");
     await userEvent.click(within(dialog).getByRole("button", { name: "Add edition" }));
-    expect(addEdition).toHaveBeenCalledWith(ALBUM, "r3", "US pressing");
+    expect(addEdition).toHaveBeenCalledWith(ALBUM, "r3", "Remastered");
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("ordinary pressing");
+  });
+
+  it("removes the album from the Collection after confirming", async () => {
+    renderApp(`/albums/${ALBUM}`);
+    await userEvent.click(await screen.findByRole("button", { name: "Remove from Collection" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove from Collection?" });
+    expect(removeFromCollection).not.toHaveBeenCalled();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Remove" }));
+    expect(removeFromCollection).toHaveBeenCalledWith([ALBUM]);
+    expect(await screen.findByText(/Removed from your Collection/)).toBeInTheDocument();
   });
 
   it("explains a missing album", async () => {
@@ -422,7 +450,7 @@ describe("ratings on the album page", () => {
     lucky.focus();
     await userEvent.keyboard("{Home}");
     expect(setTrackRating).toHaveBeenCalledWith("t2", 0);
-    const fav = screen.getByRole("button", { name: "Favourite: Airbag" });
+    const fav = screen.getByRole("button", { name: "Like: Airbag" });
     expect(fav).toHaveAttribute("aria-pressed", "true");
     await userEvent.click(fav);
     expect(setFavourite).toHaveBeenCalledWith("t1", false);

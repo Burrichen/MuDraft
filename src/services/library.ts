@@ -109,6 +109,13 @@ export async function removeFromListenList(albumIds: readonly string[]): Promise
   return typeof raw === "number" ? raw : 0;
 }
 
+/** Removes every edition of the albums from the Collection; resolves to albums removed. */
+export async function removeFromCollection(albumIds: readonly string[]): Promise<number> {
+  const raw = await callNative("collection_remove_albums", { albumIds });
+  notifyLibraryChanged();
+  return typeof raw === "number" ? raw : 0;
+}
+
 export async function listTags(): Promise<TagInfo[]> {
   const raw = await callNative("tags_list");
   if (!Array.isArray(raw)) throw invalid("Tag list");

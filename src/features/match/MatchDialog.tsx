@@ -14,6 +14,7 @@ import {
   type SearchPage,
   type SearchQuery,
 } from "../../services/metadata";
+import { collapseEditions, editionLabel } from "./editionGroups";
 import "./match.css";
 
 export type MatchChoice =
@@ -131,20 +132,17 @@ function EditionOption({
 }) {
   const facts = [
     edition.date.value ?? "Date unknown",
-    edition.country,
-    edition.formats.join(" + ") || null,
     `${String(edition.trackCount)} tracks`,
-    edition.status,
+    edition.status === "Official" ? null : edition.status,
   ].filter(Boolean);
+  const label = editionLabel(edition.disambiguation);
   return (
     <label className="match-option" data-checked={checked}>
       <input type="radio" name={name} checked={checked} onChange={onSelect} />
       <span className="match-option-body">
         <span className="match-option-title">
           {edition.title}
-          {edition.disambiguation && (
-            <span className="match-muted"> ({edition.disambiguation})</span>
-          )}
+          {label && <span className="match-muted"> ({label})</span>}
         </span>
         <span className="match-option-meta">{facts.join(" · ")}</span>
       </span>
@@ -290,7 +288,8 @@ export function MatchDialog({
 
   const candidates = results.kind === "ready" ? results.data.value.candidates : [];
   const candidate = candidates.find((c) => c.id === groupId);
-  const editionList = editions.kind === "ready" ? editions.data.value.editions : [];
+  const editionList =
+    editions.kind === "ready" ? collapseEditions(editions.data.value.editions) : [];
   const edition = editionList.find((e) => e.id === releaseId);
 
   const manualReady = form.title.trim() !== "" && form.artist.trim() !== "" && !yearInvalid;
@@ -560,8 +559,8 @@ export function MatchDialog({
                     )}
                     {editions.data.value.truncated && (
                       <p className="match-muted">
-                        Showing the first {editionList.length} of {editions.data.value.total}{" "}
-                        editions.
+                        Built from the first {editions.data.value.editions.length} of{" "}
+                        {editions.data.value.total} MusicBrainz releases.
                       </p>
                     )}
                   </>

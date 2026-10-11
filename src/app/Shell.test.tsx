@@ -99,7 +99,7 @@ describe("navigation", () => {
       within(nav)
         .getAllByRole("link")
         .map((l) => l.textContent),
-    ).toEqual(["Listen List", "Next Up", "Collection", "Stats", "Settings"]);
+    ).toEqual(["Listen List", "Next Up", "Collection", "Liked", "Stats", "Settings"]);
   });
 
   it("redirects unknown paths, navigates, marks the current page, and persists the route", async () => {

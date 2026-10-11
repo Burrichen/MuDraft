@@ -104,7 +104,11 @@ describe("MuDraft native journey", () => {
     // Both bars show X/Y and a percentage.
     await waitForText("1 / 1 · 100%");
     await go("#/stats");
-    await waitForText("Best artist");
+    // Stat headings are uppercased by CSS, and getText() returns rendered text, so find
+    // the card by its accessible name.
+    await $('[aria-label="Best artist"]').waitForExist({
+      timeoutMsg: '"Best artist" never appeared',
+    });
     await waitForText("0 of 5 stars from 1 rated album");
   });
 
