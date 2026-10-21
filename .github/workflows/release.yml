@@ -297,10 +297,16 @@ jobs:
         id: signing
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
-            echo "No Developer ID configured: ad-hoc signed, not notarized."
+          # All six or none: a signed build is always notarized, so the release notes stay true.
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ] || [ -z "$APPLE_SIGNING_IDENTITY" ] ||
+             [ -z "$APPLE_ID" ] || [ -z "$APPLE_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "No complete Developer ID + notarization configuration: ad-hoc signed, not notarized."
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -327,7 +333,12 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           args=(tauri build --ci --target universal-apple-darwin --bundles app,dmg)
-          if [ "$SIGNED" = true ]; then args+=(--config "$RUNNER_TEMP/signing.json"); fi
+          if [ "$SIGNED" = true ]; then
+            args+=(--config "$RUNNER_TEMP/signing.json")
+          else
+            # Tauri treats a set-but-empty APPLE_CERTIFICATE as a certificate to import.
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+          fi
           npx "${args[@]}"
           mkdir -p release
           cp "src-tauri/target/universal-apple-darwin/release/bundle/dmg/MuDraft_${VERSION}_universal.dmg" \

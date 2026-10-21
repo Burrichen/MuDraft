@@ -62,7 +62,7 @@ Nothing secret is stored in the repository, and every one of these is optional.
 | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD`                       | secret   | Authenticode-sign the installer (base64 `.pfx` and its password).                                        |
 | `WINDOWS_TIMESTAMP_URL`                                                     | variable | Timestamp server (default: DigiCert's public one).                                                       |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` | secret   | Sign with a "Developer ID Application" certificate (base64 `.p12`, its password, and the identity name). |
-| `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`                               | secret   | Notarize the signed app (`APPLE_PASSWORD` is an app-specific password).                                  |
+| `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`                               | secret   | Notarize the signed app (`APPLE_PASSWORD` is an app-specific password). Set all six or none: with only some, the DMG stays ad-hoc signed. |
 | `MUDRAFT_SYNC_TEST_OWNER`, `MUDRAFT_SYNC_TEST_REPO`                         | variable | A dedicated, empty, **private** test repository for the live sync test.                                  |
 | `MUDRAFT_SYNC_TEST_TOKEN`                                                   | secret   | A fine-grained token for that test repository only, with Contents set to Read and write.                 |
 
