@@ -10,6 +10,7 @@ import { DataSources } from "./AboutSettings";
 import { ProfileSettings } from "./ProfileSettings";
 import { MetadataSettings } from "./MetadataSettings";
 import { ListeningSettings } from "../listening/ListeningSettings";
+import { SyncSettings } from "../sync/SyncSettings";
 import { TagManager } from "../tags/TagManager";
 
 type Storage =
@@ -155,6 +156,7 @@ export function SettingsPage() {
         <ArtworkSettings />
         <MetadataSettings />
         <ProfileSettings />
+        <SyncSettings />
         <section className="panel section" aria-labelledby="settings-storage">
           <h2 id="settings-storage" className="section-title">
             Storage

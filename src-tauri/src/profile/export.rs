@@ -41,7 +41,7 @@ pub(crate) fn insertable_columns(conn: &Connection, table: &str) -> AppResult<Ve
     Ok(cols)
 }
 
-fn to_json(v: ValueRef<'_>, table: &str) -> AppResult<serde_json::Value> {
+pub(crate) fn to_json(v: ValueRef<'_>, table: &str) -> AppResult<serde_json::Value> {
     Ok(match v {
         ValueRef::Null => serde_json::Value::Null,
         ValueRef::Integer(i) => i.into(),

@@ -3,6 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { artworkPreference, clearArtworkCache, setArtworkPreference } from "../../services/album";
 import { renderApp } from "../../test/renderApp";
 
+vi.mock("../../services/sync", async (importOriginal) =>
+  (await import("../../test/syncMock")).syncServiceMock(importOriginal),
+);
 vi.mock("../../services/album", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../services/album")>()),
   artworkPreference: vi.fn(),

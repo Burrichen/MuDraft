@@ -2,31 +2,24 @@
 
 ## Completed steps
 
-- **Foundation → Audit**: Tauri 2.12/React 19/TS 6/Vite 8 (Node 24.21.0, Rust 1.97.1); schema v1–v11; spec §§1–7; native WebdriverIO E2E behind the test-only `e2e` feature (`check:isolation`).
-- **Windows release 1.0.0 (latest)**:
-  - Colour correction (spec §1): charcoal/grey tokens, blue accents only, neutral selected surfaces and placeholders, charcoal icon. Listen ASAP defaults to mustard (v11 keeps chosen colours).
-  - NSIS per-user installer `MuDraft_<version>_windows_x64_setup.exe` with offline WebView2 (~127 MB). Signing is optional via CI secrets (`docs/WINDOWS.md`).
-  - `Windows release` workflow builds the installer on `windows-latest` and runs `scripts/windows/verify-install.ps1`. On a `v*` tag it publishes the release.
-  - Fixed a Listen List race that dropped the search from the URL.
-- **1.1.0**: Collection cards drop "Mark listened" and gain Remove (`collection_remove_albums`), and the album page has "Remove from Collection". Edition pickers show one entry per edition, not per format or country (`editionGroups.ts`). The heart now means "Liked", with a Liked tab (`liked_tracks`). Stats shows only a count and a link. Stats page redesigned: hero figure, KPI tiles, hand-built HTML column/stacked/bar charts with hover tips and a table toggle (`charts.tsx`).
+- **Foundation → 1.1.0**: Tauri 2.12/React 19/TS 6/Vite 8 (Node 24.21.0, Rust 1.97.1); spec §§1–7; Windows installer and release workflow; native E2E behind the test-only `e2e` feature.
+- **Prompts 22–23 — private GitHub sync**: engine in `src-tauri/src/sync/` (schema v12 `sync_state`), deterministic `sync/` format, three-way merge, conflicts, backups, fast-forward commits, `keyring-core` token store, `fs4` free-space check. Settings → GitHub Sync (`src/features/sync/`): setup steps, connect/test/token/disconnect, status, progress events, first-sync preview (Upload/Download/Merge), per-field conflict choices, recovery advice. User guide: `docs/SYNC.md`.
 
-## Checks run
+## Checks run (macOS 26.6.2 only)
 
-- 1.1.0 on Windows 11: `npm run check` (212 web, all Rust passing). Stats checked by screenshot with sample data at 1440 and 600 px. E2E not run.
-
-- macOS 26.6.2: `npm run check` (198 web, 200 Rust), `npm run e2e` 10/10, and a 9-screen × 4 size/zoom sweep with axe (no contrast findings).
-- Windows (`windows-latest` CI): `npm run check`. The native E2E passes 10/10 through tauri-driver on WebView2 153, run de-elevated (wry#1782). The installer is 210 MB, unsigned. Install, shortcuts, the production data folder, restart, upgrade from 0.9.0 and an uninstall that keeps the profile all pass; screenshots show the grey theme.
+- `npm run check` passes: 239 web tests (including axe in jsdom) and 150 Rust lib tests, among them 30 sync tests against mocked GitHub with two separate profiles.
+- macOS Keychain round trip passes (`os_secure_store`, ignored by default).
+- Native E2E (WebDriver, macOS WebKit): 11/11, including a Settings → GitHub Sync step that goes through the real bridge without contacting GitHub.
+- Not run: real GitHub (`live_` test needs `MUDRAFT_SYNC_TEST_*`), anything on Windows, Windows Credential Manager.
 
 ## Unverified
 
-- Windows theme seen only in CI screenshots (start-up and dialog).
-- The WebView2 offline-install path is not exercised, because runners already have WebView2.
-- Manual screen-reader pass.
+- Real GitHub API and token scopes; sync UI on Windows/WebView2; visual review of the sync section; screen-reader pass.
 
 ## Blockers
 
-See `docs/RELEASE_BLOCKERS.md`.
+See `docs/RELEASE_BLOCKERS.md`. Sync needs a real two-computer check with a private repository.
 
 ## Next step
 
-Signing decision; macOS distribution.
+Run the live test and the Windows CI checks; manual Mac + Windows sync trial.

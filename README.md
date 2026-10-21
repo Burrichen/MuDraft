@@ -61,6 +61,14 @@ Searches and lookups run natively in Rust (`src-tauri/src/metadata/`); the rende
 
 A live smoke test is excluded from normal runs: `cargo test --manifest-path src-tauri/Cargo.toml live_musicbrainz -- --ignored`.
 
+## Downloads
+
+Each release has a Windows x64 installer and a universal macOS disk image in one [GitHub Release](https://github.com/Burrichen/MuDraft/releases). How to check them, install them, and produce new versions: [docs/RELEASE.md](docs/RELEASE.md), [docs/WINDOWS.md](docs/WINDOWS.md), [docs/MACOS.md](docs/MACOS.md).
+
+## GitHub sync
+
+Optional, manual sync between your computers through your own private GitHub repository (Settings → GitHub Sync). Setup, first-sync choices, conflicts, and troubleshooting: [docs/SYNC.md](docs/SYNC.md).
+
 ## CSV import
 
 Listen List → Import CSV. Required columns: Album, Artist. Optional: Year, Edition, Tags (separated by `;`), MusicBrainz Release Group ID, MusicBrainz Release ID. UTF-8 (BOM optional) or UTF-16 with BOM; quoted fields may contain commas and line breaks. Artist names are never split. Rows are staged and previewed; nothing changes until Import. Format details: `src-tauri/src/csv_import/mod.rs`.

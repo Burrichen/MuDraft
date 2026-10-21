@@ -15,6 +15,7 @@ pub mod metadata;
 mod paths;
 pub mod profile;
 mod state;
+pub mod sync;
 
 use tauri::Manager;
 
@@ -39,6 +40,10 @@ pub fn run() {
             app.manage(metadata);
             app.manage(artwork);
             app.manage(commands::profile::ProfileImports::default());
+            app.manage(sync::SyncService::new(
+                std::sync::Arc::new(sync::github::ReqwestGitHubTransport::new()?),
+                std::sync::Arc::new(sync::secrets::OsSecretStore::new(StorageProfile::current())),
+            ));
             Ok(())
         })
         // Cached artwork, served only from files recorded in the database.
@@ -127,6 +132,14 @@ pub fn run() {
             commands::profile::profile_import_choose,
             commands::profile::profile_import_confirm,
             commands::profile::profile_import_cancel,
+            commands::sync::sync_status,
+            commands::sync::sync_configure,
+            commands::sync::sync_disconnect,
+            commands::sync::sync_set_token,
+            commands::sync::sync_remove_token,
+            commands::sync::sync_check,
+            commands::sync::sync_initialize,
+            commands::sync::sync_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MuDraft");

@@ -87,6 +87,14 @@
     "allow-profile-export",
     "allow-profile-import-choose",
     "allow-profile-import-confirm",
-    "allow-profile-import-cancel"
+    "allow-profile-import-cancel",
+    "allow-sync-status",
+    "allow-sync-configure",
+    "allow-sync-disconnect",
+    "allow-sync-set-token",
+    "allow-sync-remove-token",
+    "allow-sync-check",
+    "allow-sync-initialize",
+    "allow-sync-now"
   ]
 }

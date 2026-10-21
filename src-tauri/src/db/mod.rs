@@ -19,6 +19,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/0009_discography.sql"),
     include_str!("migrations/0010_catalogue_credits.sql"),
     include_str!("migrations/0011_asap_mustard.sql"),
+    include_str!("migrations/0012_sync.sql"),
 ];
 
 pub const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
@@ -135,6 +136,32 @@ impl Database {
         let value = f(&tx)?; // dropping `tx` on error rolls back
         tx.commit()?;
         Ok(value)
+    }
+
+    /// Like [`Database::write`], but with foreign-key actions off so rows can be replaced
+    /// in any order without cascades or RESTRICT failures (SQLite only allows switching
+    /// this outside a transaction). Every reference is verified before commit, and
+    /// enforcement is restored whatever the outcome.
+    pub(crate) fn write_unordered<T>(
+        &mut self,
+        f: impl FnOnce(&Transaction<'_>) -> AppResult<T>,
+    ) -> AppResult<T> {
+        self.conn.pragma_update(None, "foreign_keys", false)?;
+        let result = (|| {
+            let tx = self
+                .conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)?;
+            let value = f(&tx)?;
+            check_foreign_keys(&tx)?;
+            tx.commit()?;
+            Ok(value)
+        })();
+        let restored = self.conn.pragma_update(None, "foreign_keys", true);
+        match (result, restored) {
+            (Ok(v), Ok(())) => Ok(v),
+            (Err(e), _) => Err(e),
+            (Ok(_), Err(e)) => Err(e.into()),
+        }
     }
 
     pub fn schema_version(&self) -> AppResult<i64> {

@@ -5,7 +5,7 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 ## 1. Platform and design
 
 - Tauri 2, React, TypeScript, Vite. SQLite accessed only through narrow Rust commands.
-- No hosted backend, accounts, telemetry, subscription, or runtime Node server.
+- No hosted backend, accounts, telemetry, subscription, or runtime Node server. Optional GitHub sync (§7) uses the user's own GitHub account and private repository.
 - Sleek dark UI inspired by FDraft: collapsible sidebar, artwork cards, restrained motion.
 - Colour (supersedes the earlier navy/blue base): a neutral charcoal/grey app, after VS Code's default dark theme and FDraft, with blue accents only. Backgrounds, sidebar, cards, dialogs, inputs, and unselected bubbles stay grey (`#1E1E1E`, `#252526`, `#2D2D30`; borders `#3C3C3C`; text `#D4D4D4`/`#A6A6A6`). Blue (`#3794FF` family) is reserved for primary actions, links, focus rings, selected indicators, and progress fills; active nav/filter states may use restrained blue. No navy surfaces or broad blue gradients. Artwork, user tag colours, and success/warning/error colours are kept; Listen ASAP defaults to mustard yellow. Change colours only through shared theme tokens (`src/theme/tokens.css`), keeping WCAG AA contrast. No theme selector.
 - Navigation: Listen List, Next Up, Collection, Stats, Settings; nested Album and Artist pages.
@@ -53,10 +53,18 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 - Core use works offline.
 - Ship Windows x64 NSIS setup `.exe` and universal macOS `.dmg`.
 - Native platform CI builds, honest signing status, and recoverable storage are required.
+- Optional private GitHub sync (one person, several computers), manual only, from Settings → GitHub Sync (no background sync, no new sidebar page):
+  - A separate, user-created private repository (suggested `MuDraft-Sync`), written only under `sync/` with a versioned format marker. Only an explicit, confirmed initialise writes to an empty repository; Sync treats uninitialised, unrelated, public, or newer-format repositories as setup errors, never overwriting them.
+  - One fine-grained token per computer (that repository only, Contents read/write), kept in the OS secure store and used only from Rust.
+  - A versioned, deterministic portable state (not a database copy); custom artwork as content-addressed assets; caches, credentials, paths, and window state excluded.
+  - Deterministic three-way merge against the last common state; conflicting edits are returned for the user to resolve, never settled by clocks.
+  - Backup before local changes, transactional apply, fast-forward-only commits; never force-push or rewrite history.
+  - First sync previews both libraries and needs an explicit Upload, Download, or Merge choice; an existing library is never replaced silently.
+  - Private storage is not end-to-end encryption.
 
 ## 8. Exclusions
 
-External critic/community scores; RYM/Pitchfork integrations; Diary screen; streaming/playback integrations; playlists; social features; challenges; events; streaks; cloud sync; automatic updater.
+External critic/community scores; RYM/Pitchfork integrations; Diary screen; streaming/playback integrations; playlists; social features; challenges; events; streaks; hosted or automatic cloud sync (only the manual GitHub sync in §7); automatic updater.
 
 ## 9. Module map (planned)
 
@@ -70,7 +78,7 @@ External critic/community scores; RYM/Pitchfork integrations; Diary screen; stre
   - `domain/` ratings, dates, IDs, picker, stats, genre normalization (pure, unit-tested)
   - `library/` transactional persistence contracts (catalogue, personal data, selection, settings, provenance)
   - `import/` CSV parsing and match review; `metadata/` MusicBrainz + Cover Art Archive client and artwork cache
-  - `portability/` profile export/import
+  - `portability/` profile export/import; `sync/` GitHub sync (state, merge, GitHub client, secure token store)
 - `.github/workflows/` — native Windows/macOS build CI
 
 ## 10. Planned sequence
@@ -88,3 +96,4 @@ External critic/community scores; RYM/Pitchfork integrations; Diary screen; stre
 11. Stats.
 12. Settings and profile export/import.
 13. Release packaging, signing status, CI artifacts.
+14. Private GitHub sync: engine and safe merging (Prompt 22); sync UI and conflict resolution (Prompt 23).

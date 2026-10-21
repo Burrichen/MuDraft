@@ -2,7 +2,7 @@
 
 ## Installing
 
-Download `MuDraft_<version>_windows_x64_setup.exe` from the GitHub release and run it. You don't need Node, Rust, SQLite, a terminal, or this repository.
+Download `MuDraft_<version>_windows_x64_setup.exe` from the GitHub release (see `docs/RELEASE.md`) and run it. You don't need Node, Rust, SQLite, a terminal, or this repository.
 
 - **Per-user install.** No administrator rights are needed. The app goes into `%LOCALAPPDATA%\MuDraft`, with a Start menu and a desktop shortcut.
 - **Works offline.** The installer contains Microsoft's offline WebView2 runtime installer, which adds about 127 MB. If WebView2 is missing (rare on Windows 10/11), it is installed without a network connection. If WebView2 is already present, that step is skipped.
@@ -18,7 +18,7 @@ Download `MuDraft_<version>_windows_x64_setup.exe` from the GitHub release and r
 
 ## Signing (maintainers)
 
-The `Windows release` workflow signs the installer only when you provide your own code-signing certificate. Nothing secret is stored in the repository.
+The `Release` workflow signs the installer only when you provide your own code-signing certificate. Nothing secret is stored in the repository.
 
 - `WINDOWS_CERTIFICATE`: a secret containing the `.pfx` file, base64-encoded.
 - `WINDOWS_CERTIFICATE_PASSWORD`: a secret containing the `.pfx` password.
@@ -31,10 +31,11 @@ Without these secrets the build is an unsigned personal release, and the release
 The installer is built on a `windows-latest` runner. `scripts/windows/verify-install.ps1` then checks on that runner:
 
 - the silent install;
-- the shortcuts and the Add/Remove Programs entry;
+- the shortcuts, the Add/Remove Programs entry and icon, and the executable's version;
+- the first launch from the Start menu shortcut;
 - that no fixtures or test hooks are installed;
 - that the production data folder is used and the development override is ignored;
-- that the profile survives a restart and an upgrade from an older installer;
+- that the profile and artwork survive a restart and an upgrade from the latest published release, including its database migration;
 - that uninstalling keeps the profile.
 
 The offline WebView2 install path is **not** exercised in CI, because the runner already has WebView2.

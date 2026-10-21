@@ -83,6 +83,14 @@ fn main() {
             "profile_import_choose",
             "profile_import_confirm",
             "profile_import_cancel",
+            "sync_status",
+            "sync_configure",
+            "sync_disconnect",
+            "sync_set_token",
+            "sync_remove_token",
+            "sync_check",
+            "sync_initialize",
+            "sync_now",
         ]),
     ))
     .expect("failed to run tauri-build");

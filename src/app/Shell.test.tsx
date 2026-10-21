@@ -7,6 +7,9 @@ import { renderApp } from "../test/renderApp";
 import { showErrorDialog } from "../transport/dialogs";
 import { NativeError } from "../transport/native";
 
+vi.mock("../services/sync", async (importOriginal) =>
+  (await import("../test/syncMock")).syncServiceMock(importOriginal),
+);
 vi.mock("../services/stats", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/stats")>()),
   statsOverview: vi.fn(() => new Promise(() => undefined)),

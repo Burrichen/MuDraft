@@ -9,6 +9,7 @@ pub mod metadata;
 pub mod next_up;
 pub mod profile;
 pub mod stats;
+pub mod sync;
 
 #[cfg(test)]
 mod journey_tests;
