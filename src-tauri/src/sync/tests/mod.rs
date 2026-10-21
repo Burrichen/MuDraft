@@ -885,7 +885,10 @@ async fn expired_or_missing_tokens_are_reported_and_never_stored() {
     );
     crate::commands::profile::export_to(&a.state, &a.dir.path().join("export.mudraft"), true)
         .unwrap();
-    assert!(files_containing(a.dir.path(), TOKEN.as_bytes()).is_empty());
+    // Close the profile first: Windows locks byte ranges of open SQLite files.
+    let Device { dir, state, .. } = a;
+    drop(state);
+    assert!(files_containing(dir.path(), TOKEN.as_bytes()).is_empty());
     assert!(gh.paths().iter().all(|p| {
         !gh.file(p)
             .unwrap()

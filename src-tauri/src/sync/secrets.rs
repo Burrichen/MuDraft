@@ -71,7 +71,7 @@ impl OsSecretStore {
             let store = windows_native_keyring_store::Store::new().map_err(describe)?;
             let local = std::collections::HashMap::from([("persistence", "Local")]);
             store
-                .build(self.service, ACCOUNT, Some(&local))
+                .build(&self.service, ACCOUNT, Some(&local))
                 .map_err(describe)
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows")))]
