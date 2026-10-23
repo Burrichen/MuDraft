@@ -1,0 +1,231 @@
+/* GitHub Sync settings. Grey surfaces; blue only for the active/selected accents. */
+
+.sync-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.sync-badge::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--text-subtle);
+}
+
+.sync-badge[data-tone="ok"]::before {
+  background: var(--ok);
+}
+
+.sync-badge[data-tone="pending"]::before,
+.sync-badge[data-tone="busy"]::before {
+  background: var(--accent-indicator);
+}
+
+.sync-badge[data-tone="warning"]::before {
+  background: var(--warning);
+}
+
+.sync-badge[data-tone="error"] {
+  border-color: var(--danger);
+}
+
+.sync-badge[data-tone="error"]::before {
+  background: var(--danger);
+}
+
+.sync-steps {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  font-size: var(--text-sm);
+}
+
+.sync-steps summary {
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.sync-steps ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  padding-left: var(--space-5);
+}
+
+.sync-steps code,
+.sync-form code,
+.facts code {
+  font-size: 0.95em;
+}
+
+.sync-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sync-input {
+  width: min(22rem, 100%);
+}
+
+.sync-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.sync-notice-title {
+  font-weight: var(--weight-semibold);
+}
+
+.sync-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  color: var(--text);
+}
+
+.sync-checkbox input {
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--accent);
+}
+
+.sync-first {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sync-preview {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.sync-preview th,
+.sync-preview td {
+  padding: var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.sync-preview th:first-child {
+  text-align: left;
+  font-weight: var(--weight-medium);
+}
+
+.sync-preview thead th {
+  color: var(--text-muted);
+  font-weight: var(--weight-semibold);
+}
+
+.sync-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sync-conflict {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.sync-conflict-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+.sync-conflict-record {
+  color: var(--text);
+  font-weight: var(--weight-semibold);
+}
+
+.sync-conflict-field {
+  color: var(--text-muted);
+}
+
+.sync-conflict-field::before {
+  content: "· ";
+}
+
+.sync-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(14rem, 100%), 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.sync-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.sync-choice:hover {
+  background: var(--surface-hover);
+}
+
+.sync-choice[data-selected="true"] {
+  border-color: var(--accent-indicator);
+  background: var(--accent-soft);
+}
+
+.sync-choice input {
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+}
+
+.sync-choice:has(input:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.sync-choice-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.sync-choice-label {
+  color: var(--text);
+  font-weight: var(--weight-medium);
+}
+
+.sync-choice-value {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

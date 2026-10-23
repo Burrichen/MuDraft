@@ -1,4 +1,5 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 /**
  * The only renderer → Rust bridge. Every call names one narrow Rust command;
@@ -85,7 +86,18 @@ export type NativeCommand =
   | "profile_export"
   | "profile_import_choose"
   | "profile_import_confirm"
-  | "profile_import_cancel";
+  | "profile_import_cancel"
+  | "sync_status"
+  | "sync_configure"
+  | "sync_disconnect"
+  | "sync_set_token"
+  | "sync_remove_token"
+  | "sync_check"
+  | "sync_initialize"
+  | "sync_now";
+
+/** Events Rust emits to the renderer. */
+export type NativeEvent = "sync-progress";
 
 /** Mirrors `AppError` serialization in `src-tauri/src/error.rs`. */
 export interface NativeErrorPayload {
@@ -129,6 +141,16 @@ export async function callNative(
   } catch (raw) {
     throw toNativeError(raw);
   }
+}
+
+/** Subscribe to a native event; resolves to an unsubscribe function. */
+export async function listenNative(
+  event: NativeEvent,
+  handler: (payload: unknown) => void,
+): Promise<() => void> {
+  return listen<unknown>(event, (e) => {
+    handler(e.payload);
+  });
 }
 
 /**

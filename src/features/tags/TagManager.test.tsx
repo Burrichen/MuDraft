@@ -4,6 +4,9 @@ import { createTag, deleteTag, listTags, updateTag, type TagInfo } from "../../s
 import { renderApp } from "../../test/renderApp";
 import { NativeError } from "../../transport/native";
 
+vi.mock("../../services/sync", async (importOriginal) =>
+  (await import("../../test/syncMock")).syncServiceMock(importOriginal),
+);
 vi.mock("../../services/metadata", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../services/metadata")>()),
   metadataCacheStats: vi.fn(() => Promise.resolve({ entries: 0, bytes: 0, expired: 0 })),

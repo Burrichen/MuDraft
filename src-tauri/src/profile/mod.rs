@@ -87,6 +87,10 @@ pub const EXCLUDED: &[(&str, &str)] = &[
     ("metadata_cache", "disposable MusicBrainz response cache"),
     ("import_session", "CSV import staging (transient)"),
     ("import_row", "CSV import staging (transient)"),
+    (
+        "sync_state",
+        "GitHub sync bookkeeping for this computer (re-linked after a restore)",
+    ),
 ];
 
 /// Only user preferences travel; anything else in `setting` stays behind.

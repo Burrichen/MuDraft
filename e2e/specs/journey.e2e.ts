@@ -1,7 +1,7 @@
 /**
  * The product journey through the real native app and real SQLite:
  * CSV → match → tag → guided pick → reroll → rate tracks (explicit zero) → log listen →
- * Collection → Artist/Stats → export → restart (persistence) → restore.
+ * Collection → Artist/Stats → export → GitHub Sync settings → restart (persistence) → restore.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -117,6 +117,18 @@ describe("MuDraft native journey", () => {
     await click("Export profile…");
     await waitForText("Saved “profile.mudraft”");
     expect(fs.statSync(path.join(work(), "profile.mudraft")).size).toBeGreaterThan(0);
+  });
+
+  it("shows GitHub Sync through the native bridge without contacting GitHub", async () => {
+    await go("#/settings");
+    await waitForText("How to set it up");
+    await waitForText("Not Connected");
+    // No token is typed: the real credential store is never written by this test.
+    await click("Connect");
+    await waitForText("Enter the repository owner and name.");
+    const text = await $("body").getText();
+    expect(text).not.toContain("Couldn’t read the sync settings");
+    expect(text).toContain("isn’t end-to-end encrypted");
   });
 
   it("keeps everything after the app restarts", async () => {

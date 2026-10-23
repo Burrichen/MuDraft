@@ -3,10 +3,11 @@
   It installs, launches, and uninstalls MuDraft for the current user, so never run it on a
   machine whose MuDraft profile matters.
 
-  Checks: per-user install location, shortcuts, Add/Remove Programs metadata, installed
-  files (no fixtures, test servers, or databases), production data folder (the
-  development override is ignored), persistence across restarts, upgrade from an older
-  installer keeping the profile, and an uninstall that keeps the profile by default.
+  Checks: per-user install location, shortcuts, Add/Remove Programs metadata, executable
+  version and icon, installed files (no fixtures, test servers, or databases), first launch
+  from the Start menu shortcut, production data folder (the development override is
+  ignored), persistence across restarts, upgrade from the previous release keeping the
+  profile and artwork (with its schema migration), and an uninstall that keeps the profile.
 #>
 param(
   [Parameter(Mandatory)] [string] $Installer,
@@ -73,12 +74,22 @@ function Shot([string] $name) {
   $g.Dispose(); $bmp.Dispose()
 }
 
-# Launches the installed app as a user would, with the development data-folder override
-# set: a release build must ignore it. Waits for the database, then closes the app.
-function Launch([string] $label) {
+# Launches the installed app with the development data-folder override set (a release
+# build must ignore it), either through the Start menu shortcut as a user would, or the
+# executable directly. Waits for the database, then closes the app.
+function Launch([string] $label, [int] $minSchema, [switch] $FromStartMenu) {
   Write-Host "== Launch ($label)"
   $env:MUDRAFT_DATA_DIR = $Ignored
-  $app = Start-Process (MainExe) -PassThru
+  if ($FromStartMenu) {
+    $name = [IO.Path]::GetFileNameWithoutExtension((MainExe))
+    Start-Process $StartMenuLink
+    $deadline = (Get-Date).AddSeconds(60)
+    do { Start-Sleep -Milliseconds 500; $app = Get-Process -Name $name -ErrorAction SilentlyContinue | Select-Object -First 1 }
+    while (-not $app -and (Get-Date) -lt $deadline)
+    Check ($null -ne $app) 'app started from the Start menu shortcut'
+  } else {
+    $app = Start-Process (MainExe) -PassThru
+  }
   Remove-Item Env:\MUDRAFT_DATA_DIR
   $deadline = (Get-Date).AddSeconds(90)
   while (-not (Test-Path $Db) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
@@ -90,7 +101,7 @@ function Launch([string] $label) {
   if (-not $app.WaitForExit(15000)) { Stop-Process -Id $app.Id -Force; $app.WaitForExit() }
   Check (-not (Test-Path $Ignored)) 'release build ignored the development data override'
   Check ((Sql 'PRAGMA quick_check') -eq 'ok') 'database integrity check passes'
-  Check ([int](Sql 'PRAGMA user_version') -ge 11) 'database is at the current schema'
+  Check ([int](Sql 'PRAGMA user_version') -ge $minSchema) "database is at schema $minSchema or later"
 }
 
 Check (-not (Test-Path $InstallDir)) 'no previous install on this machine'
@@ -111,7 +122,7 @@ $text = [System.Text.Encoding]::ASCII.GetString($bytes)
 foreach ($needle in 'wdio', 'MUDRAFT_E2E', 'TAURI_WEBDRIVER_PORT') {
   Check (-not $text.Contains($needle)) "app binary has no '$needle' test hook"
 }
-Launch 'first-run'
+Launch 'first-run' 11 -FromStartMenu
 
 # 2. Seed a profile marker and an artwork file while the app is closed.
 Write-Host '== Seed user data'
@@ -120,13 +131,18 @@ New-Item -ItemType Directory -Force $Artwork | Out-Null
 $png = [Convert]::FromBase64String('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
 [System.IO.File]::WriteAllBytes((Join-Path $Artwork 'marker.png'), $png)
 $marker = "SELECT COUNT(*) FROM tag WHERE name = 'Upgrade marker'"
-Launch 'restart'
+Launch 'restart' 11
 Check ((Sql $marker) -eq '1') 'profile kept after restart'
 
 # 3. Upgrade in place to the release build.
 Install $Installer $Version
 Check (Test-Path $StartMenuLink) 'Start menu shortcut after upgrade'
-Launch 'after-upgrade'
+$info = (Get-Item (MainExe)).VersionInfo
+Check ($info.ProductVersion -like "$Version*") "executable product version is $Version (got $($info.ProductVersion))"
+Add-Type -AssemblyName System.Drawing
+Check ($null -ne [System.Drawing.Icon]::ExtractAssociatedIcon((MainExe))) 'executable carries an icon'
+Check ([bool](Get-ItemProperty $UninstallKey).DisplayIcon) 'Add/Remove Programs shows an icon'
+Launch 'after-upgrade' 12 -FromStartMenu
 Check ((Sql $marker) -eq '1') 'profile kept across upgrade'
 Check (Test-Path (Join-Path $Artwork 'marker.png')) 'artwork kept across upgrade'
 Check ((Sql "SELECT color FROM tag WHERE builtin_key = 'listen_asap'") -eq '#d4a017') 'Listen ASAP default is mustard'

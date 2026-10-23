@@ -45,6 +45,9 @@ vi.mock("../../services/library", async (importOriginal) => ({
   listTags: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock("../../services/health", () => ({ checkHealth: vi.fn() }));
+vi.mock("../../services/sync", async (importOriginal) =>
+  (await import("../../test/syncMock")).syncServiceMock(importOriginal),
+);
 vi.mock("../../services/profile", () => ({
   exportProfile: vi.fn(),
   chooseProfileToRestore: vi.fn(),

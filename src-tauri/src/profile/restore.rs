@@ -174,7 +174,7 @@ fn read_manifest(zip: &mut ZipArchive<File>, entries: &Entries) -> AppResult<Man
     serde_json::from_slice(&bytes).map_err(|e| corrupt(format!("manifest: {e}")))
 }
 
-fn sql_value(v: &serde_json::Value, table: &str) -> AppResult<Value> {
+pub(crate) fn sql_value(v: &serde_json::Value, table: &str) -> AppResult<Value> {
     Ok(match v {
         serde_json::Value::Null => Value::Null,
         serde_json::Value::Bool(b) => Value::Integer(i64::from(*b)),

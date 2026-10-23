@@ -32,6 +32,19 @@ pub enum AppError {
     Cancelled,
     #[error("Metadata provider error: {0}")]
     Provider(String),
+    /// No usable GitHub token: none stored, expired, or revoked. Local data is untouched.
+    #[error("GitHub sign-in needed: {0}")]
+    AuthRequired(String),
+    /// The sync repository can't be used as it is (missing, public, unrelated, too new…).
+    #[error("Sync setup problem: {0}")]
+    SyncSetup(String),
+    /// GitHub answered with an error that isn't about setup or sign-in.
+    #[error("GitHub sync error: {0}")]
+    SyncRemote(String),
+    #[error("Can't reach {0}. Check your connection; your changes stay on this computer.")]
+    SyncOffline(String),
+    #[error("Not enough free disk space: {0}")]
+    DiskFull(String),
     #[error("Internal error: {0}")]
     Internal(String),
 }
@@ -52,6 +65,11 @@ impl AppError {
             Self::RateLimited(_) => "rate_limited",
             Self::Cancelled => "cancelled",
             Self::Provider(_) => "provider_error",
+            Self::AuthRequired(_) => "auth_required",
+            Self::SyncSetup(_) => "sync_setup",
+            Self::SyncRemote(_) => "sync_remote",
+            Self::SyncOffline(_) => "sync_offline",
+            Self::DiskFull(_) => "disk_full",
             Self::Internal(_) => "internal",
         }
     }
@@ -73,6 +91,7 @@ impl From<rusqlite::Error> for AppError {
             Some(ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt) => {
                 Self::StorageCorrupt(err.to_string())
             }
+            Some(ErrorCode::DiskFull) => Self::DiskFull(err.to_string()),
             // Constraints are the last line of defence behind Rust validation; report, never retry.
             Some(ErrorCode::ConstraintViolation) => {
                 match err.sqlite_error().map(|e| e.extended_code) {

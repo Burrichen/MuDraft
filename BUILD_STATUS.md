@@ -2,31 +2,22 @@
 
 ## Completed steps
 
-- **Foundation → Audit**: Tauri 2.12/React 19/TS 6/Vite 8 (Node 24.21.0, Rust 1.97.1); schema v1–v11; spec §§1–7; native WebdriverIO E2E behind the test-only `e2e` feature (`check:isolation`).
-- **Windows release 1.0.0 (latest)**:
-  - Colour correction (spec §1): charcoal/grey tokens, blue accents only, neutral selected surfaces and placeholders, charcoal icon. Listen ASAP defaults to mustard (v11 keeps chosen colours).
-  - NSIS per-user installer `MuDraft_<version>_windows_x64_setup.exe` with offline WebView2 (~127 MB). Signing is optional via CI secrets (`docs/WINDOWS.md`).
-  - `Windows release` workflow builds the installer on `windows-latest` and runs `scripts/windows/verify-install.ps1`. On a `v*` tag it publishes the release.
-  - Fixed a Listen List race that dropped the search from the URL.
-- **1.1.0**: Collection cards drop "Mark listened" and gain Remove (`collection_remove_albums`), and the album page has "Remove from Collection". Edition pickers show one entry per edition, not per format or country (`editionGroups.ts`). The heart now means "Liked", with a Liked tab (`liked_tracks`). Stats shows only a count and a link. Stats page redesigned: hero figure, KPI tiles, hand-built HTML column/stacked/bar charts with hover tips and a table toggle (`charts.tsx`).
+- **Foundation → 1.1.0**: Tauri 2.12/React 19/TS 6/Vite 8 (Node 24.21.0, Rust 1.97.1); spec §§1–7; native E2E behind the test-only `e2e` feature.
+- **Prompts 22–23 — private GitHub sync**: engine in `src-tauri/src/sync/`, Settings → GitHub Sync UI, `docs/SYNC.md`.
+- **Prompt 24 — 1.2.0 release**: `.github/workflows/release.yml` builds the NSIS x64 setup `.exe` and a universal ad-hoc-signed `.dmg` from one commit into one draft release with `SHA256SUMS.txt`. Optional signing secrets. Docs: `docs/RELEASE.md`, `docs/MACOS.md`, `docs/RELEASE_ACCEPTANCE.md`.
 
-## Checks run
+## Checks run (Release run 39595028911, commit e37c0f7)
 
-- 1.1.0 on Windows 11: `npm run check` (212 web, all Rust passing). Stats checked by screenshot with sample data at 1440 and 600 px. E2E not run.
-
-- macOS 26.6.2: `npm run check` (198 web, 200 Rust), `npm run e2e` 10/10, and a 9-screen × 4 size/zoom sweep with axe (no contrast findings).
-- Windows (`windows-latest` CI): `npm run check`. The native E2E passes 10/10 through tauri-driver on WebView2 153, run de-elevated (wry#1782). The installer is 210 MB, unsigned. Install, shortcuts, the production data folder, restart, upgrade from 0.9.0 and an uninstall that keeps the profile all pass; screenshots show the grey theme.
-
-## Unverified
-
-- Windows theme seen only in CI screenshots (start-up and dialog).
-- The WebView2 offline-install path is not exercised, because runners already have WebView2.
-- Manual screen-reader pass.
+- Test gates (Windows, macOS): `npm run check`, 239 web + 151 Rust tests, including the two-device acceptance journey; real Keychain and Credential Manager round trips.
+- Windows: installed the published 1.1.0 → Start-menu launch → restart → upgrade to 1.2.0 → uninstall, profile kept.
+- DMG on Apple Silicon (arm64 and Rosetta x86_64) and Intel runners: layout, plist, `lipo`, ad-hoc `codesign`, LaunchServices launch, restart, upgrade from a 0.9.0-labelled build of the same code (no earlier macOS release exists), uninstall.
+- Draft `v1.2.0` assets and checksums inspected; not published.
+- Skipped: `live-sync` (no test secrets). Untested: Developer ID and Authenticode signing paths, quarantined-download Gatekeeper prompt.
 
 ## Blockers
 
-See `docs/RELEASE_BLOCKERS.md`.
+`docs/RELEASE_BLOCKERS.md`: real two-computer acceptance and real GitHub sync not yet run.
 
 ## Next step
 
-Signing decision; macOS distribution.
+Run `docs/RELEASE_ACCEPTANCE.md` with the draft's files, then publish.
