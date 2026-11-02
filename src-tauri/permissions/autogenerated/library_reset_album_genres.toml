@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-library-reset-album-genres"
+description = "Enables the library_reset_album_genres command without any pre-configured scope."
+commands.allow = ["library_reset_album_genres"]
+
+[[permission]]
+identifier = "deny-library-reset-album-genres"
+description = "Denies the library_reset_album_genres command without any pre-configured scope."
+commands.deny = ["library_reset_album_genres"]

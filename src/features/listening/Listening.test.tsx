@@ -47,6 +47,7 @@ const LOGGED: Logged = {
     restoreListenList: ["a1", EDITION],
     createdCollectionFor: EDITION,
     completedAttempt: null,
+    restoreProgress: [],
   },
 };
 
@@ -136,7 +137,6 @@ describe("ListenDialog", () => {
       listenedOn: "2019-06-01",
       kind: "relisten",
       earlierUndated: false,
-      trackIds: null,
       attemptId: null,
     });
     resolve(LOGGED);
@@ -162,34 +162,18 @@ describe("ListenDialog", () => {
     expect(calls[0]?.[1]).toMatchObject({ listenedOn: null, earlierUndated: true });
   });
 
-  it("rejects future dates and requires tracks in track mode", async () => {
+  it("rejects future dates", async () => {
     const user = userEvent.setup();
     render(
-      <ListenDialog
-        albumTitle="Blue"
-        editionId={EDITION}
-        tracks={[
-          { id: "t1", label: "1 All I Want", listened: false },
-          { id: "t2", label: "2 My Old Man", listened: true },
-        ]}
-        onClose={vi.fn()}
-        onLogged={vi.fn()}
-      />,
+      <ListenDialog albumTitle="Blue" editionId={EDITION} onClose={vi.fn()} onLogged={vi.fn()} />,
     );
-    const save = screen.getByRole("button", { name: "Log tracks" });
-    await user.click(save);
-    expect(logListen).not.toHaveBeenCalled();
-    await user.click(screen.getByLabelText(/All I Want/));
+    const save = screen.getByRole("button", { name: "Mark listened" });
     const date = screen.getByLabelText("Date listened");
     await user.clear(date);
     await user.type(date, "2999-01-01");
     await user.click(save);
     expect(logListen).not.toHaveBeenCalled();
-    vi.mocked(logListen).mockResolvedValue({ ...LOGGED, isFull: false });
-    await user.clear(date);
-    await user.type(date, "2020-01-01");
-    await user.click(save);
-    expect(vi.mocked(logListen).mock.calls[0]?.[1]).toMatchObject({ trackIds: ["t1"] });
+    expect(save).toHaveAccessibleDescription("That date is in the future.");
   });
 });
 

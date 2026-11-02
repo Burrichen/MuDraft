@@ -1,3 +1,4 @@
+import { Icon } from "../../components/Icon";
 import { RatingInput } from "../../components/Rating";
 import { formatDuration, type AlbumDetail } from "../../services/album";
 import { runtimeText } from "./runtime";
@@ -6,11 +7,14 @@ export function Tracklist({
   detail,
   onRate,
   onFavourite,
+  onMark,
 }: {
   detail: AlbumDetail;
   /** Half-stars 0–10, or null to clear. */
   onRate: (trackId: string, halfStars: number | null) => void;
   onFavourite: (trackId: string, favourite: boolean) => void;
+  /** Present while this edition is on the Listen List: tick tracks off as you go. */
+  onMark?: ((trackId: string, marked: boolean) => void) | undefined;
 }) {
   if (detail.discs.length === 0) {
     return <p className="setting-hint">This edition has no tracklist yet.</p>;
@@ -39,13 +43,27 @@ export function Tracklist({
             </thead>
             <tbody>
               {disc.tracks.map((t) => (
-                <tr key={t.id}>
+                <tr key={t.id} className={onMark && t.marked ? "track-marked" : undefined}>
                   <td className="track-num">{t.position}</td>
                   <td>
                     <span className="track-title">{t.title}</span>
                     {t.credit && <span className="setting-hint"> · {t.credit}</span>}
-                    {t.listened && <span className="track-flag"> · Listened</span>}
+                    {!onMark && t.listened && <span className="track-flag"> · Listened</span>}
                     <div className="track-controls">
+                      {onMark && (
+                        <button
+                          type="button"
+                          className="mini-button mark-button"
+                          aria-pressed={t.marked}
+                          aria-label={`Listened to: ${t.title}`}
+                          title={t.marked ? "Listened to" : "Mark as listened to"}
+                          onClick={() => {
+                            onMark(t.id, !t.marked);
+                          }}
+                        >
+                          <Icon name={t.marked ? "eyeCheck" : "eye"} size={16} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="mini-button favourite-button"

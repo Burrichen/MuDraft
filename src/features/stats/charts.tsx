@@ -194,59 +194,6 @@ export function ColumnChart({
   );
 }
 
-export interface Segment {
-  key: string;
-  label: string;
-  value: number;
-  /** One of the validated series colours (`--series-1` …) or the neutral. */
-  color: string;
-}
-
-/**
- * One part-to-whole bar with a legend that carries every label, value, and share, so
- * identity never depends on colour alone.
- */
-export function StackedBar({ label, segments }: { label: string; segments: Segment[] }) {
-  const total = segments.reduce((n, s) => n + s.value, 0);
-  const pct = (v: number) => (total > 0 ? Math.round((v / total) * 100) : 0);
-  return (
-    <div className="stack-block">
-      <div
-        className="stack"
-        role="img"
-        aria-label={`${label}: ${segments.map((s) => `${s.label} ${String(s.value)}`).join(", ")}`}
-      >
-        {total === 0 ? (
-          <span className="stack-empty" />
-        ) : (
-          segments
-            .filter((s) => s.value > 0)
-            .map((s) => (
-              <span
-                key={s.key}
-                className="stack-seg"
-                style={{ flexGrow: s.value, background: s.color }}
-                title={`${s.label}: ${String(s.value)} (${String(pct(s.value))}%)`}
-              />
-            ))
-        )}
-      </div>
-      <ul className="stack-legend" aria-label={`${label} legend`}>
-        {segments.map((s) => (
-          <li key={s.key}>
-            <span className="swatch" style={{ background: s.color }} aria-hidden="true" />
-            <span className="stack-legend-label">{s.label}</span>
-            <span className="stack-legend-value">
-              {s.value}
-              <span className="stack-legend-pct"> · {pct(s.value)}%</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 /** Five stars filled to `stars` (0–5), decorative: pair with the number in text. */
 export function StarMeter({ stars }: { stars: number }) {
   return (

@@ -10,6 +10,8 @@ export function formatDuration(ms: number): string {
   return h > 0 ? `${String(h)} h ${String(m)} min` : `${String(m)} min`;
 }
 
+export const oneDecimal = (n: number) => String(Math.round(n * 10) / 10);
+
 export const plural = (n: number, one: string, many = `${one}s`) =>
   `${String(n)} ${n === 1 ? one : many}`;
 

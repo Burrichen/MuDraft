@@ -102,20 +102,21 @@ fn rich_profile(s: &AppState) {
             ).unwrap())?;
             // Not a user preference: must not travel.
             tx.execute("INSERT INTO setting (key, value) VALUES ('dev.secret_flag', 'true')", [])?;
-            let log = |edition: &str, date: Option<&str>, kind, tracks: Option<Vec<String>>, earlier| {
+            let log = |edition: &str, date: Option<&str>, kind, earlier| {
                 listening::log(tx, Some(&new_id()), &LogListen {
                     edition_id: edition.into(),
                     listened_on: date.map(Into::into),
                     kind,
                     earlier_undated: earlier,
-                    track_ids: tracks,
                     attempt_id: None,
                 })
             };
-            log(&std_ed.edition_id, Some("2026-08-10"), ListenKind::First, None, true)?;
-            log(&dlx.edition_id, None, ListenKind::Relisten, Some(vec![dlx.track_ids[1].clone()]), false)?;
-            let gone = log(&std_ed.edition_id, Some("2026-07-01"), ListenKind::Unspecified, None, false)?;
+            log(&std_ed.edition_id, Some("2026-08-10"), ListenKind::First, true)?;
+            listening::legacy_partial_listen(tx, &dlx.edition_id, None, ListenKind::Relisten, &[dlx.track_ids[1].clone()], false)?;
+            let gone = log(&std_ed.edition_id, Some("2026-07-01"), ListenKind::Unspecified, false)?;
             listening::delete(tx, &gone.listen_id)?;
+            // Listen List progress travels with the profile.
+            personal::mark_listen_list_track(tx, &dlx.track_ids[0], true)?;
             ratings::set_track(tx, &std_ed.track_ids[0], Some(0))?;
             ratings::set_album(tx, &dlx.edition_id, Some(7))?;
             ratings::set_review(tx, &std_ed.edition_id, Some("Still great."))?;
@@ -688,9 +689,12 @@ fn future_versions_are_rejected_without_changes() {
 fn older_schema_exports_are_upgraded_by_the_normal_migrations() {
     let s = setup();
     let older = s.root.join("older.mudraft");
-    // As written by a MuDraft at schema 9 (before catalogue credit parts existed).
+    // As written by a MuDraft at schema 9 (before catalogue credit parts and Listen List
+    // progress existed).
     tamper(&s.archive, &older, true, |m, e| {
         m.schema_version = 9;
+        m.tables.retain(|t| t.name != "listen_list_track");
+        e.remove("data/listen_list_track.json");
         edit_table(e, "catalogue_entry", |d| {
             let i = d.columns.iter().position(|c| c == "credit_parts").unwrap();
             d.columns.remove(i);

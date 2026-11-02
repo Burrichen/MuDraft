@@ -107,22 +107,64 @@ fn listen(
     tracks: Option<Vec<String>>,
     earlier: bool,
 ) -> String {
+    let Some(tracks) = tracks else {
+        return db
+            .write(|tx| {
+                listening::log(
+                    tx,
+                    Some(&new_id()),
+                    &LogListen {
+                        edition_id: edition.into(),
+                        listened_on: date.map(Into::into),
+                        kind,
+                        earlier_undated: earlier,
+                        attempt_id: None,
+                    },
+                )
+            })
+            .unwrap()
+            .listen_id;
+    };
+    // A track-only listen as logged before only whole albums could be.
+    let id = new_id();
+    let kind = match kind {
+        ListenKind::First => "first",
+        ListenKind::Relisten => "relisten",
+        ListenKind::Unspecified => "unspecified",
+    };
     db.write(|tx| {
-        listening::log(
-            tx,
-            Some(&new_id()),
-            &LogListen {
-                edition_id: edition.into(),
-                listened_on: date.map(Into::into),
-                kind,
-                earlier_undated: earlier,
-                track_ids: tracks,
-                attempt_id: None,
-            },
-        )
+        let album: String = tx.query_row(
+            "SELECT album_id FROM edition WHERE id = ?1",
+            [edition],
+            |r| r.get(0),
+        )?;
+        let status = if date.is_some() { "known" } else { "undated" };
+        tx.execute(
+            "INSERT INTO listen_event (id, edition_id, album_id, listened_on, date_status, is_full, kind, coverage)
+             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, 'tracks')",
+            rusqlite::params![id, edition, album, date, status, kind],
+        )?;
+        for track in &tracks {
+            tx.execute(
+                "INSERT INTO listen_event_track (listen_event_id, edition_id, track_id) VALUES (?1, ?2, ?3)",
+                rusqlite::params![id, edition, track],
+            )?;
+        }
+        if earlier {
+            tx.execute(
+                "INSERT INTO listen_event (id, edition_id, album_id, listened_on, date_status, is_full, kind, coverage)
+                 VALUES (?1, ?2, ?3, NULL, 'undated', 1, 'prior_history', 'unknown')",
+                rusqlite::params![new_id(), edition, album],
+            )?;
+        }
+        tx.execute(
+            "INSERT INTO collection_entry (edition_id, album_id, source) VALUES (?1, ?2, 'listen') ON CONFLICT DO NOTHING",
+            rusqlite::params![edition, album],
+        )?;
+        Ok(())
     })
-    .unwrap()
-    .listen_id
+    .unwrap();
+    id
 }
 
 fn set_added(db: &mut Database, album: &str, at: &str) {
@@ -160,7 +202,7 @@ fn empty_library_reports_zeros_and_no_winners() {
         (0, 0)
     );
     assert!(s.collection.ratings.average_stars.is_none());
-    assert!(s.collection.best_year.winners.is_empty());
+    assert!(s.collection.best_year.top.is_empty());
     assert!(s.collection.runtime.complete && s.collection.runtime.sessions == 0);
     assert_eq!(s.selection.len(), 5);
     assert!(s.selection.iter().all(|m| m.shown == 0));
@@ -439,29 +481,32 @@ fn fixture_matches_hand_calculated_results() {
 
     // Best year uses original years: 1997 = (Two 4 + Three 2.5) / 2 = 3.25 from 2 albums
     // (Three's 2017 reissue and 2025 listen don't move it); 1994 = 1.5; Four unplaced.
-    assert_eq!(col.best_year.winners.len(), 1);
-    assert_eq!(col.best_year.winners[0].key, "1997");
+    // Neither year has the 3 rated albums needed to be ranked.
     assert_eq!(group(&col.best_year, "1997"), (3.25, 2));
+    assert!(col.best_year.top.is_empty());
+    assert_eq!(col.best_year.min_albums, 3);
     assert_eq!(col.best_year.unplaced_albums, 1);
     let (decade, count) = group(&col.best_decade, "1990s");
     assert!(close(decade, 8.0 / 3.0) && count == 3);
+    let top_decades: Vec<&str> = col
+        .best_decade
+        .top
+        .iter()
+        .map(|g| g.label.as_str())
+        .collect();
+    assert_eq!(top_decades, ["1990s"], "three rated albums: ranked");
     // Genres overlap: Rock = (One 1.5 + Two 4) / 2 = 2.75; Pop = 1.5; Jazz = 2.5.
-    assert_eq!(col.best_genre.winners[0].label, "Rock");
+    assert_eq!(col.best_genre.groups[0].label, "Rock");
     assert_eq!(group(&col.best_genre, "Rock"), (2.75, 2));
     assert_eq!(group(&col.best_genre, "Pop"), (1.5, 1));
     assert_eq!(col.best_genre.unplaced_albums, 1);
     // Artists: Alpha (One, Two) 2.75; Beta (Two, Three) 3.25 — Two's three listens count
-    // once; Gamma (Four) 3.5 from a single album wins: no minimum sample.
+    // once; Gamma (Four) 3.5 has the highest mean but from a single album, so nobody has
+    // the 3 rated albums the ranking needs.
     assert_eq!(group(&col.best_artist, "Alpha"), (2.75, 2));
     assert_eq!(group(&col.best_artist, "Beta"), (3.25, 2));
-    assert_eq!(col.best_artist.winners.len(), 1);
-    assert_eq!(
-        (
-            col.best_artist.winners[0].label.as_str(),
-            col.best_artist.winners[0].albums
-        ),
-        ("Gamma", 1)
-    );
+    assert_eq!(col.best_artist.groups[0].label, "Gamma");
+    assert!(col.best_artist.top.is_empty());
 
     let favs: Vec<&str> = col
         .favourite_tracks
@@ -491,31 +536,95 @@ fn fixture_matches_hand_calculated_results() {
     assert_eq!(m("all"), (4, 2, 1, 1));
 }
 
+fn rated(db: &mut Database, title: &str, who: &str, half_stars: i64) {
+    let al = album(db, title, &[who], Some("2000"), &["Rock"]);
+    let ed = edition(db, &al, "Standard", None, &[(Some(60), None)]);
+    db.write(|tx| {
+        personal::add_to_collection(tx, &ed.edition_id, personal::CollectionSource::Manual)?;
+        ratings::set_album(tx, &ed.edition_id, Some(half_stars)).map(|_| ())
+    })
+    .unwrap();
+}
+
 #[test]
-fn tied_groups_are_all_winners() {
+fn top_rated_lists_the_best_three_with_at_least_three_albums() {
     let (_d, mut db) = open_temp();
-    let a = artist(&mut db, "Alpha");
-    let b = artist(&mut db, "Beta");
-    for (title, who) in [("X", &a), ("Y", &b)] {
-        let al = album(&mut db, title, &[who], Some("2000"), &["Rock"]);
-        let ed = edition(&mut db, &al, "Standard", None, &[(Some(60), None)]);
-        db.write(|tx| {
-            personal::add_to_collection(tx, &ed.edition_id, personal::CollectionSource::Manual)?;
-            ratings::set_album(tx, &ed.edition_id, Some(6)).map(|_| ())
-        })
-        .unwrap();
+    // Means: Beta 4, Alpha 3, Gamma 2, Delta 1 (three albums each); Solo 5 from one album.
+    for (name, half_stars) in [("Alpha", 6), ("Beta", 8), ("Gamma", 4), ("Delta", 2)] {
+        let a = artist(&mut db, name);
+        for i in 0..3 {
+            rated(&mut db, &format!("{name} {i}"), &a, half_stars);
+        }
     }
+    let solo = artist(&mut db, "Solo");
+    rated(&mut db, "Solo 0", &solo, 10);
     let col = db.read(stats::collection).unwrap();
-    let winners: Vec<&str> = col
+    let top: Vec<(&str, u32)> = col
         .best_artist
-        .winners
+        .top
         .iter()
-        .map(|w| w.label.as_str())
+        .map(|g| (g.label.as_str(), g.albums))
         .collect();
-    assert_eq!(winners, ["Alpha", "Beta"]);
-    assert_eq!(col.best_year.winners[0].albums, 2);
+    assert_eq!(top, [("Beta", 3), ("Alpha", 3), ("Gamma", 3)]);
+    assert_eq!(
+        col.best_artist.groups[0].label, "Solo",
+        "still in the full list"
+    );
+    assert_eq!(col.best_year.top[0].albums, 13);
     assert_eq!(
         col.distinct_listened_albums, 0,
         "manual Collection entries aren't listens"
     );
+}
+
+#[test]
+fn various_artists_is_not_counted_as_an_artist() {
+    let (_d, mut db) = open_temp();
+    let real = artist(&mut db, "Alpha");
+    let by_name = artist(&mut db, "Various Artists");
+    let by_id = db
+        .write(|tx| {
+            catalogue::create_artist(
+                tx,
+                None,
+                &catalogue::NewArtist {
+                    name: "VA".into(),
+                    sort_name: None,
+                    musicbrainz_id: Some("89ad4ac3-39f7-470e-963a-56509c546377".into()),
+                },
+            )
+        })
+        .unwrap();
+    for (i, who) in [&real, &by_name, &by_id].into_iter().enumerate() {
+        for n in 0..3 {
+            let al = album(&mut db, &format!("{i}-{n}"), &[who], Some("2000"), &[]);
+            let ed = edition(&mut db, &al, "Standard", None, &[(Some(60), None)]);
+            db.write(|tx| {
+                personal::add_to_listen_list(tx, &ed.edition_id)?;
+                personal::add_to_collection(
+                    tx,
+                    &ed.edition_id,
+                    personal::CollectionSource::Manual,
+                )?;
+                ratings::set_album(tx, &ed.edition_id, Some(8)).map(|_| ())
+            })
+            .unwrap();
+        }
+    }
+    let s = db.read(|c| stats::overview(c, NOW)).unwrap();
+    let names = |groups: &[stats::GroupScore]| -> Vec<String> {
+        groups.iter().map(|g| g.label.clone()).collect()
+    };
+    assert_eq!(names(&s.collection.best_artist.groups), ["Alpha"]);
+    assert_eq!(names(&s.collection.best_artist.top), ["Alpha"]);
+    assert_eq!(s.listen_list.distinct_artists, 1);
+    let listed: Vec<&str> = s
+        .listen_list
+        .artists
+        .iter()
+        .map(|c| c.label.as_str())
+        .collect();
+    assert_eq!(listed, ["Alpha"]);
+    // The albums themselves still count everywhere else.
+    assert_eq!(s.collection.ratings.rated_albums, 9);
 }

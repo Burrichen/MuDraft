@@ -23,7 +23,7 @@ use crate::error::{AppError, AppResult};
 use crate::library::catalogue::{self, CreditInput, NewAlbum, NewArtist, NewEdition, NewTrack};
 use crate::library::listening::{self, ListenKind, LogListen};
 use crate::library::personal::{self, CollectionSource};
-use crate::library::{ratings, tags};
+use crate::library::{metadata_import, ratings, tags};
 use crate::paths::StorageProfile;
 use crate::state::AppState;
 
@@ -231,7 +231,6 @@ fn listen(dev: &Device, edition: &str, date: &str) -> String {
                 listened_on: Some(date.into()),
                 kind: ListenKind::Unspecified,
                 earlier_undated: false,
-                track_ids: None,
                 attempt_id: None,
             },
         )
@@ -519,6 +518,131 @@ async fn deletions_propagate_and_delete_versus_edit_conflicts() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn genre_overrides_and_resets_sync_between_computers() {
+    const RG: &str = "b1392450-e666-3926-a536-22c65f834433";
+    let gh = new_repo_with_readme();
+    let a = Device::new(&gh).await;
+    let linked = add_album_with(&a, "OK Computer", None, Some(RG));
+    let manual = add_album(&a, "Demo");
+    // As a MusicBrainz import leaves it: raw provider genres and the genres provenance.
+    a.write(|tx| {
+        tx.execute(
+            "INSERT INTO album_source_tag (album_id, source, kind, name, votes, fetched_at)
+             VALUES (?1, 'musicbrainz', 'genre', 'alternative rock', 20, '2026-10-01T00:00:00.000Z'),
+                    (?1, 'musicbrainz', 'genre', 'electronic', 8, '2026-10-01T00:00:00.000Z')",
+            [&linked.album],
+        )?;
+        tx.execute(
+            "INSERT INTO metadata_provenance (entity_type, entity_id, field, source, source_ref, is_override)
+             VALUES ('album', ?1, 'genres', 'musicbrainz', ?2, 0)",
+            [&linked.album, RG],
+        )?;
+        Ok(())
+    });
+    assert!(matches!(a.init().await, SyncOutcome::Synced { .. }));
+    let b = Device::new(&gh).await;
+    synced(b.sync().await);
+
+    let genres = |dev: &Device, album: &str| {
+        dev.state
+            .with_db(|db| db.read(|c| metadata_import::current_genres(c, album)))
+            .unwrap()
+    };
+    let locked = |dev: &Device, album: &str| {
+        dev.int(&format!(
+            "SELECT is_override FROM metadata_provenance WHERE entity_id = '{album}' AND field = 'genres'"
+        ))
+    };
+
+    // An override on A arrives on B, still locked against refresh.
+    a.write(|tx| {
+        metadata_import::set_album_genres_manually(tx, &linked.album, &["Jazz".into()])?;
+        metadata_import::set_album_genres_manually(tx, &manual.album, &["Folk".into()])
+    });
+    synced(a.sync().await);
+    synced(b.sync().await);
+    assert_eq!(genres(&b, &linked.album), vec!["Jazz"]);
+    assert_eq!(locked(&b, &linked.album), Some(1));
+    assert_eq!(genres(&b, &manual.album), vec!["Folk"]);
+
+    // A reset on B arrives on A: defaults back, unlocked; the manual album's lock is gone.
+    b.write(|tx| {
+        metadata_import::reset_album_genres(tx, &linked.album)?;
+        metadata_import::reset_album_genres(tx, &manual.album)
+    });
+    synced(b.sync().await);
+    synced(a.sync().await);
+    assert_eq!(genres(&a, &linked.album), vec!["Rock", "Electronic"]);
+    assert_eq!(locked(&a, &linked.album), Some(0));
+    assert!(genres(&a, &manual.album).is_empty());
+    assert_eq!(locked(&a, &manual.album), None);
+    assert_eq!(a.dump(), b.dump());
+
+    // Editing on one computer while resetting on the other is one conflict, and the
+    // chosen side's genres keep that side's lock (never edited genres left unlocked).
+    let race = async |locked_like_default: bool, choice: Side| {
+        let start = if locked_like_default {
+            vec!["Rock".into(), "Electronic".into()]
+        } else {
+            vec!["Pop".into()]
+        };
+        a.write(|tx| metadata_import::set_album_genres_manually(tx, &linked.album, &start));
+        synced(a.sync().await);
+        synced(b.sync().await);
+        a.write(|tx| {
+            metadata_import::set_album_genres_manually(tx, &linked.album, &["Metal".into()])
+        });
+        b.write(|tx| metadata_import::reset_album_genres(tx, &linked.album));
+        synced(a.sync().await);
+        let found = conflicts(b.sync().await);
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].kind, ConflictKind::Collection);
+        assert_eq!(found[0].table, "album_genre");
+        assert_eq!(found[0].record, "Genres of OK Computer");
+        assert_eq!(
+            found[0].local,
+            json!({ "genres": ["Rock", "Electronic"], "edited": false })
+        );
+        assert_eq!(
+            found[0].remote,
+            json!({ "genres": ["Metal"], "edited": true })
+        );
+        synced(b.sync_with(None, choose(&found, choice)).await);
+        synced(a.sync().await);
+        assert_eq!(a.dump(), b.dump());
+    };
+    race(false, Side::Remote).await;
+    assert_eq!(genres(&a, &linked.album), vec!["Metal"]);
+    assert_eq!(locked(&a, &linked.album), Some(1));
+    race(false, Side::Local).await;
+    assert_eq!(genres(&a, &linked.album), vec!["Rock", "Electronic"]);
+    assert_eq!(locked(&a, &linked.album), Some(0));
+    // The reset leaves the list as it was and only unlocks it: still a conflict.
+    race(true, Side::Remote).await;
+    assert_eq!(genres(&a, &linked.album), vec!["Metal"]);
+    assert_eq!(locked(&a, &linked.album), Some(1));
+}
+
+#[tokio::test(start_paused = true)]
+async fn listen_list_progress_syncs_and_clears_everywhere_once_logged() {
+    let (_gh, a, b, album) = linked_pair().await;
+    let marked = |dev: &Device| dev.int("SELECT COUNT(*) FROM listen_list_track");
+    a.write(|tx| personal::mark_listen_list_track(tx, &album.tracks[0], true));
+    b.write(|tx| personal::mark_listen_list_track(tx, &album.tracks[2], true));
+    synced(a.sync().await);
+    synced(b.sync().await);
+    synced(a.sync().await);
+    assert_eq!((marked(&a), marked(&b)), (Some(2), Some(2)));
+
+    listen(&b, &album.edition, "2026-10-05");
+    synced(b.sync().await);
+    synced(a.sync().await);
+    assert_eq!((marked(&a), marked(&b)), (Some(0), Some(0)));
+    assert_eq!(a.int("SELECT COUNT(*) FROM listen_list_entry"), Some(0));
+    assert_eq!(a.dump(), b.dump());
+}
+
+#[tokio::test(start_paused = true)]
 async fn replaying_the_same_listen_never_duplicates_it() {
     let (gh, a, b, album) = linked_pair().await;
     listen(&a, &album.edition, "2026-10-05");
@@ -761,13 +885,37 @@ async fn damaged_newer_unrelated_or_public_repositories_are_refused() {
     assert!(err.to_string().contains("damaged"), "{err}");
     assert_eq!(b.dump(), before, "nothing changed");
 
-    // Data written at an older schema is upgraded with the normal migrations.
+    // Data written at an older schema (before Listen List progress existed) is upgraded
+    // with the normal migrations.
     let good = gh.file("sync/state/album.json").unwrap();
-    gh.commit_files(&[("sync/state/album.json", Some(&good[..good.len() - 1]))]);
+    let progress = "sync/state/listen_list_track.json";
+    let progress_file = gh.file(progress).unwrap();
+    gh.commit_files(&[
+        ("sync/state/album.json", Some(&good[..good.len() - 1])),
+        (progress, None),
+    ]);
+    let current = format.clone();
     format["schemaVersion"] = json!(11);
+    format["files"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|f| f["path"] != progress);
     gh.commit_files(&[(FORMAT_PATH, Some(&serde_json::to_vec(&format).unwrap()))]);
     synced(b.sync().await);
     assert_eq!(b.dump(), before);
+
+    // A table that didn't exist at the claimed schema is damage, reported in words.
+    gh.commit_files(&[(progress, Some(&progress_file))]);
+    let mut stale = current.clone();
+    stale["schemaVersion"] = json!(11);
+    gh.commit_files(&[(FORMAT_PATH, Some(&serde_json::to_vec(&stale).unwrap()))]);
+    let err = b.sync().await.unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("doesn't exist at this schema version"),
+        "{err}"
+    );
+    gh.commit_files(&[(FORMAT_PATH, Some(&serde_json::to_vec(&current).unwrap()))]);
 
     // An unrelated repository (say, the app's source) is never written to.
     let unrelated = Arc::new(MockGitHub::new(TOKEN));

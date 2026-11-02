@@ -536,17 +536,14 @@ async fn your_edition_is_the_reference_and_recordings_link_editions_not_titles()
     f.state
         .with_db(|db| {
             db.write(|tx| {
-                listening::log(
+                // A track-only listen from before only whole albums could be logged.
+                listening::legacy_partial_listen(
                     tx,
+                    &a_tracks.edition_id,
                     None,
-                    &LogListen {
-                        edition_id: a_tracks.edition_id.clone(),
-                        listened_on: None,
-                        kind: ListenKind::First,
-                        earlier_undated: false,
-                        track_ids: Some(a_tracks.track_ids.clone()),
-                        attempt_id: None,
-                    },
+                    ListenKind::First,
+                    &a_tracks.track_ids,
+                    false,
                 )?;
                 personal::set_track_rating(
                     tx,
@@ -750,26 +747,35 @@ fn standard_and_deluxe(
         .unwrap()
 }
 
+/// `Some(tracks)` writes an older track-only listen; new logs are whole albums.
 fn log(f: &Fixture, edition: &str, tracks: Option<Vec<String>>, earlier: bool) -> String {
+    let date = "2026-09-30";
     f.state
         .with_db(|db| {
-            db.write(|tx| {
-                listening::log(
+            db.write(|tx| match &tracks {
+                Some(tracks) => listening::legacy_partial_listen(
+                    tx,
+                    edition,
+                    Some(date),
+                    ListenKind::Unspecified,
+                    tracks,
+                    earlier,
+                ),
+                None => listening::log(
                     tx,
                     Some(&new_id()),
                     &LogListen {
                         edition_id: edition.into(),
-                        listened_on: Some("2026-09-30".into()),
+                        listened_on: Some(date.into()),
                         kind: ListenKind::Unspecified,
                         earlier_undated: earlier,
-                        track_ids: tracks,
                         attempt_id: None,
                     },
                 )
+                .map(|l| l.listen_id),
             })
         })
         .unwrap()
-        .listen_id
 }
 
 fn entry(v: &ArtistCatalogue, title: &str) -> discography::Entry {

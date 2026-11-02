@@ -38,20 +38,13 @@ type Undo = { message: string; run: () => Promise<void> };
 /** Album page listening history: log, correct, delete, each with immediate undo. */
 export function ListeningPanel({ detail }: { detail: AlbumDetail }) {
   const ids = { date: useId(), unknown: useId(), kind: useId() };
-  const [dialog, setDialog] = useState<"album" | "tracks" | null>(null);
+  const [dialog, setDialog] = useState(false);
   const [undo, setUndo] = useState<Undo | null>(null);
   const [editing, setEditing] = useState<ListenView | null>(null);
   const [draft, setDraft] = useState<ListenFields>({ listenedOn: null, kind: "unspecified" });
   const [confirming, setConfirming] = useState<ListenView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const edition = detail.editions.find((e) => e.id === detail.editionId);
-  const tracks = detail.discs.flatMap((d) =>
-    d.tracks.map((t) => ({
-      id: t.id,
-      label: `${detail.discs.length > 1 ? `${String(d.number)}.` : ""}${String(t.position)} ${t.title}`,
-      listened: t.listened,
-    })),
-  );
   const today = localToday();
 
   const act = (task: () => Promise<Undo | null>) => {
@@ -67,7 +60,7 @@ export function ListeningPanel({ detail }: { detail: AlbumDetail }) {
   };
 
   const onLogged = (logged: Logged) => {
-    setDialog(null);
+    setDialog(false);
     setUndo({ message: loggedMessage(logged), run: () => undoLog(logged.undo) });
   };
 
@@ -85,18 +78,10 @@ export function ListeningPanel({ detail }: { detail: AlbumDetail }) {
           <Button
             variant="primary"
             onClick={() => {
-              setDialog("album");
+              setDialog(true);
             }}
           >
             Mark album listened
-          </Button>
-          <Button
-            disabledReason={tracks.length === 0 ? "This edition has no tracklist yet." : undefined}
-            onClick={() => {
-              setDialog("tracks");
-            }}
-          >
-            Log tracks…
           </Button>
         </div>
       </div>
@@ -170,9 +155,8 @@ export function ListeningPanel({ detail }: { detail: AlbumDetail }) {
         <ListenDialog
           albumTitle={detail.title}
           editionId={edition.id}
-          {...(dialog === "tracks" ? { tracks } : {})}
           onClose={() => {
-            setDialog(null);
+            setDialog(false);
           }}
           onLogged={onLogged}
         />

@@ -620,6 +620,9 @@ fn artwork_db_row(row: &[Value]) -> (Vec<String>, Vec<Value>) {
 
 fn load_rows(tx: &Connection, table: &str, columns: &[String], rows: &[Row]) -> AppResult<()> {
     let pk = pk_names(tx, table)?;
+    if pk.is_empty() {
+        return Err(bad(format!("{table} doesn't exist at this schema version")));
+    }
     if table == "artwork" {
         for row in rows {
             let (cols, values) = artwork_db_row(row);

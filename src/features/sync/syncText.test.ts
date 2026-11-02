@@ -114,6 +114,14 @@ describe("sync conflicts", () => {
     const list = conflict({ kind: "collection", local: [{}, {}], remote: [] });
     expect(conflictValue(list, "local")).toBe("2 entries");
     expect(conflictValue(list, "remote")).toBe("None");
+    const genres = conflict({
+      kind: "collection",
+      table: "album_genre",
+      local: { genres: ["Rock", "Electronic"], edited: false },
+      remote: { genres: [], edited: true },
+    });
+    expect(conflictValue(genres, "local")).toBe("Rock · Electronic (default)");
+    expect(conflictValue(genres, "remote")).toBe("No genres (edited)");
   });
 });
 

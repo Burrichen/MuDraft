@@ -371,6 +371,84 @@ fn refresh_respects_user_locked_fields() {
 }
 
 #[test]
+fn resetting_genres_restores_provider_defaults_offline_and_unlocks_them() {
+    let (_d, mut db) = open_temp();
+    let out = import(&mut db, &group(), &release(REL, three_tracks()), None).unwrap();
+    assert_eq!(out.genres, vec!["Rock", "Electronic"]);
+    let genres_lock = |db: &Database| -> (String, bool) {
+        db.read(|c| Ok(c.query_row(
+            "SELECT source, is_override FROM metadata_provenance WHERE entity_type = 'album' AND field = 'genres'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?))
+        .unwrap()
+    };
+
+    db.write(|tx| metadata_import::set_album_genres_manually(tx, &out.album_id, &["Jazz".into()]))
+        .unwrap();
+    assert_eq!(genres_lock(&db), ("manual".into(), true));
+
+    let reset = db
+        .write(|tx| metadata_import::reset_album_genres(tx, &out.album_id))
+        .unwrap();
+    assert_eq!(reset, vec!["Rock", "Electronic"], "no network needed");
+    assert_eq!(
+        db.read(|c| current_genres(c, &out.album_id)).unwrap(),
+        vec!["Rock", "Electronic"]
+    );
+    assert_eq!(genres_lock(&db), ("musicbrainz".into(), false));
+
+    // Unlocked again: the next refresh may change them.
+    let mut updated = group();
+    updated.genres = vec![tag("jazz", 30)];
+    let refreshed = import(&mut db, &updated, &release(REL, three_tracks()), None).unwrap();
+    assert!(refreshed.locked_fields_kept.is_empty());
+    assert_eq!(refreshed.genres, vec!["Jazz"]);
+
+    assert_eq!(
+        db.write(|tx| metadata_import::reset_album_genres(tx, &new_id()))
+            .unwrap_err()
+            .code(),
+        "not_found"
+    );
+}
+
+#[test]
+fn resetting_a_manual_albums_genres_clears_them() {
+    let (_d, mut db) = open_temp();
+    let a = db
+        .write(|tx| {
+            metadata_import::add_manual_album(
+                tx,
+                None,
+                &ManualAlbum {
+                    title: "Demo".into(),
+                    artist_name: Some("Someone".into()),
+                    artist_id: None,
+                    year: None,
+                    edition_name: None,
+                },
+            )
+        })
+        .unwrap();
+    db.write(|tx| metadata_import::set_album_genres_manually(tx, &a.album_id, &["Folk".into()]))
+        .unwrap();
+    let reset = db
+        .write(|tx| metadata_import::reset_album_genres(tx, &a.album_id))
+        .unwrap();
+    assert!(
+        reset.is_empty(),
+        "nothing to fall back to; nothing invented"
+    );
+    let rows: i64 = scalar(
+        &db,
+        "SELECT COUNT(*) FROM metadata_provenance WHERE entity_id = ?1 AND field = 'genres'",
+        &[&a.album_id],
+    );
+    assert_eq!(rows, 0);
+}
+
+#[test]
 fn refresh_never_drops_or_remaps_rated_or_listened_tracks() {
     let (_d, mut db) = open_temp();
     let out = import(&mut db, &group(), &release(REL, three_tracks()), None).unwrap();

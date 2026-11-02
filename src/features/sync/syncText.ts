@@ -305,6 +305,12 @@ function scalar(col: string, v: unknown): string {
   return JSON.stringify(v);
 }
 
+/** An album's genres and whether they are kept as edited (one side of a genres conflict). */
+function isGenreChoice(v: unknown): v is { genres: string[]; edited: boolean } {
+  if (typeof v !== "object" || v === null || !("genres" in v) || !("edited" in v)) return false;
+  return Array.isArray(v.genres) && typeof v.edited === "boolean";
+}
+
 /** One side of a conflict, in words. */
 export function conflictValue(c: SyncConflict, side: "local" | "remote"): string {
   const value = c[side];
@@ -318,6 +324,10 @@ export function conflictValue(c: SyncConflict, side: "local" | "remote"): string
       return scalar(col, obj[col]);
     }
     case "collection":
+      if (isGenreChoice(value)) {
+        const names = value.genres.length > 0 ? value.genres.join(" · ") : "No genres";
+        return `${names} (${value.edited ? "edited" : "default"})`;
+      }
       return Array.isArray(value)
         ? value.length === 0
           ? "None"

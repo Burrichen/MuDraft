@@ -72,6 +72,8 @@ pub struct TrackView {
     pub rating: Option<u8>,
     pub favourite: bool,
     pub listened: bool,
+    /// Marked as listened on the Listen List (progress, not a logged listen).
+    pub marked: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -321,7 +323,8 @@ pub fn detail(
             "SELECT t.id, t.disc_number, t.position, t.title, t.length_ms, t.recording_id,
                     r.rating, COALESCE(r.is_favourite, 0),
                     EXISTS (SELECT 1 FROM listen_event_track l JOIN listen_event ev ON ev.id = l.listen_event_id
-                            WHERE l.track_id = t.id AND ev.deleted_at IS NULL)
+                            WHERE l.track_id = t.id AND ev.deleted_at IS NULL),
+                    EXISTS (SELECT 1 FROM listen_list_track p WHERE p.track_id = t.id)
              FROM track t LEFT JOIN track_rating r ON r.track_id = t.id
              WHERE t.edition_id = ?1 ORDER BY t.disc_number, t.position",
         )?;
@@ -340,11 +343,22 @@ pub fn detail(
                 r.get::<_, Option<u8>>(6)?,
                 r.get::<_, bool>(7)?,
                 r.get::<_, bool>(8)?,
+                r.get::<_, bool>(9)?,
             ))
         })?;
         for row in rows {
-            let (id, disc, position, title, length_ms, recording_id, rating, favourite, listened) =
-                row?;
+            let (
+                id,
+                disc,
+                position,
+                title,
+                length_ms,
+                recording_id,
+                rating,
+                favourite,
+                listened,
+                marked,
+            ) = row?;
             let track_credits: Vec<CreditView> = credit_stmt
                 .query_map(params![id], |r| {
                     Ok(CreditView {
@@ -376,6 +390,7 @@ pub fn detail(
                 rating,
                 favourite,
                 listened,
+                marked,
             };
             match discs.last_mut() {
                 Some(d) if d.number == disc => d.tracks.push(track),

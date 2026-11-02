@@ -3,8 +3,11 @@
 //!   extra editions never inflate them. Unknown years and runtimes are reported apart.
 //! - Collection quality uses rated Collection albums only, scored by the canonical rule
 //!   shared with Artist pages (`ratings::album_score`): one contribution per album however
-//!   many editions or re-listens. Zero is a rating; unrated albums are left out. There are
-//!   no minimum sample sizes, smoothing, or penalties; ties are all reported as winners.
+//!   many editions or re-listens. Zero is a rating; unrated albums are left out. No
+//!   smoothing or penalties; the "Top rated" rankings consider only groups with at least
+//!   [`TOP_MIN_ALBUMS`] rated albums and list the best [`TOP_LIMIT`].
+//! - "Various Artists" (MusicBrainz's placeholder for compilations) is not an artist and is
+//!   left out of artist counts and rankings.
 //! - Selection completion comes from stored attempt provenance, never from current tags.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -107,6 +110,16 @@ pub struct ListenListStats {
 
 const LIST_LIMIT: usize = 5;
 
+/// Rated albums a group needs before the "Top rated" rankings consider it.
+pub const TOP_MIN_ALBUMS: u32 = 3;
+/// Entries listed under each "Top rated" heading.
+pub const TOP_LIMIT: usize = 3;
+
+/// SQL condition (artist aliased `ar`) that keeps real artists only: not MusicBrainz's
+/// special-purpose "Various Artists" (by ID, or by name for manual entries).
+const REAL_ARTIST: &str = "ar.musicbrainz_id IS NOT '89ad4ac3-39f7-470e-963a-56509c546377'
+     AND lower(trim(ar.name)) != 'various artists'";
+
 /// `now` is an RFC 3339 UTC timestamp (injected so tests are deterministic).
 pub fn listen_list(conn: &Connection, now: &str) -> AppResult<ListenListStats> {
     let (entries, distinct_albums): (u32, u32) = conn.query_row(
@@ -116,11 +129,12 @@ pub fn listen_list(conn: &Connection, now: &str) -> AppResult<ListenListStats> {
     )?;
 
     let mut artists: HashMap<String, (String, u32)> = HashMap::new();
-    let mut stmt = conn.prepare(
+    let mut stmt = conn.prepare(&format!(
         "SELECT ar.id, ar.name, COUNT(DISTINCT c.album_id) FROM album_artist_credit c
-         JOIN artist ar ON ar.id = c.artist_id
-         WHERE c.album_id IN (SELECT album_id FROM listen_list_entry) GROUP BY ar.id",
-    )?;
+             JOIN artist ar ON ar.id = c.artist_id
+             WHERE c.album_id IN (SELECT album_id FROM listen_list_entry) AND {REAL_ARTIST}
+             GROUP BY ar.id"
+    ))?;
     for row in stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))? {
         let (id, name, n): (String, String, u32) = row?;
         artists.insert(id, (name, n));
@@ -305,8 +319,10 @@ pub struct GroupScore {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Best {
-    /// Every group sharing the highest mean (ties are all winners).
-    pub winners: Vec<GroupScore>,
+    /// The best groups with at least [`TOP_MIN_ALBUMS`] rated albums, at most [`TOP_LIMIT`].
+    pub top: Vec<GroupScore>,
+    /// Rated albums a group needs to be ranked in `top`.
+    pub min_albums: u32,
     /// All groups, best first.
     pub groups: Vec<GroupScore>,
     /// Rated albums that couldn't be placed (unknown year, no genre).
@@ -373,14 +389,15 @@ fn best(groups: HashMap<String, (String, Vec<f64>)>, unplaced_albums: u32) -> Be
             .total_cmp(&a.mean_stars)
             .then_with(|| a.label.to_lowercase().cmp(&b.label.to_lowercase()))
     });
-    let top = groups.first().map(|g| g.mean_stars);
-    let winners = groups
+    let top = groups
         .iter()
-        .filter(|g| Some(g.mean_stars) == top)
+        .filter(|g| g.albums >= TOP_MIN_ALBUMS)
+        .take(TOP_LIMIT)
         .cloned()
         .collect();
     Best {
-        winners,
+        top,
+        min_albums: TOP_MIN_ALBUMS,
         groups,
         unplaced_albums,
     }
@@ -413,10 +430,10 @@ pub fn collection(conn: &Connection) -> AppResult<CollectionStats> {
         let genres = g
             .query_map(params![album_id], |r| r.get(0))?
             .collect::<Result<_, _>>()?;
-        let mut a = conn.prepare(
+        let mut a = conn.prepare(&format!(
             "SELECT ar.id, ar.name FROM album_artist_credit c JOIN artist ar ON ar.id = c.artist_id
-             WHERE c.album_id = ?1",
-        )?;
+             WHERE c.album_id = ?1 AND {REAL_ARTIST}"
+        ))?;
         let artists = a
             .query_map(params![album_id], |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<Result<_, _>>()?;

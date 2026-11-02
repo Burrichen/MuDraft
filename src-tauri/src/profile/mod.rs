@@ -60,6 +60,7 @@ pub const TABLES: &[&str] = &[
     "metadata_provenance",
     "album_source_tag",
     "listen_list_entry",
+    "listen_list_track",
     "collection_entry",
     "listen_event",
     "listen_event_track",

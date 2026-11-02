@@ -6,6 +6,8 @@
 - **Prompts 22–23 — private GitHub sync**: engine in `src-tauri/src/sync/`, Settings → GitHub Sync UI, `docs/SYNC.md`.
 - **Prompt 24 — 1.2.0 release**: `.github/workflows/release.yml` builds the NSIS x64 setup `.exe` and a universal ad-hoc-signed `.dmg` from one commit into one draft release with `SHA256SUMS.txt`. Optional signing secrets. Docs: `docs/RELEASE.md`, `docs/MACOS.md`, `docs/RELEASE_ACCEPTANCE.md`.
 
+- **`feature/genre-overrides`**: editable genres with reset; whole-album logging; Listen List eye marks per track; Collection track highlights; stats fixes (top 3, min 3 albums, no Various Artists). `npm run check` passes; app untried.
+
 ## Checks run (Release run 39595028911, commit e37c0f7)
 
 - Test gates (Windows, macOS): `npm run check`, 239 web + 151 Rust tests, including the two-device acceptance journey; real Keychain and Credential Manager round trips.

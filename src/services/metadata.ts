@@ -224,6 +224,14 @@ export async function setAlbumGenres(
   return raw;
 }
 
+/** Drop the manual genres and go back to MuDraft's defaults from stored MusicBrainz data. */
+export async function resetAlbumGenres(albumId: string): Promise<string[]> {
+  const raw = await callNative("library_reset_album_genres", { albumId });
+  notifyLibraryChanged();
+  if (!Array.isArray(raw) || !raw.every((g) => typeof g === "string")) throw invalid("Genres");
+  return raw;
+}
+
 export async function genreVocabulary(): Promise<string[]> {
   const raw = await callNative("genre_vocabulary");
   if (!Array.isArray(raw) || !raw.every((g) => typeof g === "string"))

@@ -24,14 +24,18 @@ import {
   type EditionView,
 } from "../../services/album";
 import { removeFromCollection } from "../../services/library";
+import { resetAlbumGenres } from "../../services/metadata";
 import { useLibraryVersion } from "../../services/libraryEvents";
 import { TagPicker } from "../tags/TagPicker";
 import { EditAlbumDialog } from "./EditAlbumDialog";
+import { EditGenresDialog } from "./EditGenresDialog";
 import { AddEditionDialog, SwitchEditionDialog } from "./EditionDialogs";
+import { markListenListTrack } from "../../services/listening";
 import { setFavourite, setTrackRating } from "../../services/ratings";
 import { ListeningPanel } from "../listening/ListeningPanel";
 import { RatingPanel } from "./RatingPanel";
 import { runtimeText } from "./runtime";
+import { TrackHighlights } from "./TrackHighlights";
 import { Tracklist } from "./Tracklist";
 import "./album.css";
 
@@ -64,6 +68,7 @@ export function AlbumPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [editingGenres, setEditingGenres] = useState(false);
   const [adding, setAdding] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<EditionView | null>(null);
@@ -159,6 +164,7 @@ export function AlbumPage() {
   const inCollection = detail.editions.some((e) => e.inCollection);
   const art = detail.artwork;
   const linked = detail.musicbrainzReleaseGroupId !== null;
+  const genresEdited = detail.lockedFields.includes("genres");
   const showBadge =
     edition && (detail.editions.length > 1 || edition.name.toLowerCase() !== "standard");
   const editionYear = edition?.releaseDate.year;
@@ -323,10 +329,38 @@ export function AlbumPage() {
               </span>
             )}
           </p>
-          <p className="album-genres-line">
+          <div className="album-tag-row">
             <span className="filter-group-label">Genres </span>
-            {detail.genres.length > 0 ? detail.genres.join(" · ") : "None yet"}
-          </p>
+            <span>{detail.genres.length > 0 ? detail.genres.join(" · ") : "None yet"}</span>
+            {genresEdited && <span className="setting-hint">Edited by you</span>}
+            <Button
+              variant="ghost"
+              className="button-small"
+              aria-label={`Edit genres for ${detail.title}`}
+              onClick={() => {
+                setEditingGenres(true);
+              }}
+            >
+              Edit
+            </Button>
+            {genresEdited && (
+              <Button
+                variant="ghost"
+                className="button-small"
+                onClick={() =>
+                  void run(async () => {
+                    const genres = await resetAlbumGenres(detail.albumId);
+                    if (genres.length > 0) return `Genres reset to ${genres.join(" · ")}.`;
+                    return linked
+                      ? "Genres reset. MusicBrainz has no genres MuDraft can use for this album."
+                      : "Genres cleared. This album isn’t linked to MusicBrainz, so there are no defaults.";
+                  })
+                }
+              >
+                Reset to default
+              </Button>
+            )}
+          </div>
           <div className="album-tag-row">
             <span className="filter-group-label">Tags </span>
             {detail.tags.length > 0 ? (
@@ -475,8 +509,20 @@ export function AlbumPage() {
               setActionError(errorInfo(err).message);
             });
           }}
+          onMark={
+            edition?.onListenList
+              ? (trackId, marked) => {
+                  setActionError(null);
+                  markListenListTrack(trackId, marked).catch((err: unknown) => {
+                    setActionError(errorInfo(err).message);
+                  });
+                }
+              : undefined
+          }
         />
       </section>
+
+      {inCollection && <TrackHighlights detail={detail} />}
 
       <Popover
         open={tagsOpen}
@@ -503,6 +549,14 @@ export function AlbumPage() {
           detail={detail}
           onClose={() => {
             setEditing(false);
+          }}
+        />
+      )}
+      {editingGenres && (
+        <EditGenresDialog
+          detail={detail}
+          onClose={() => {
+            setEditingGenres(false);
           }}
         />
       )}

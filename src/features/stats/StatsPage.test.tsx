@@ -28,7 +28,7 @@ vi.mock("../../services/health", () => ({
 const ALPHA = "0190f5c3-0000-7000-8000-0000000000a1";
 const BETA = "0190f5c3-0000-7000-8000-0000000000a2";
 
-const noBest: Best = { winners: [], groups: [], unplacedAlbums: 0 };
+const noBest: Best = { top: [], minAlbums: 3, groups: [], unplacedAlbums: 0 };
 const group = (key: string, label: string, meanStars: number, albums: number) => ({
   key,
   label,
@@ -82,20 +82,28 @@ function stats(over: Partial<Stats> = {}): Stats {
         distribution: [{ stars: 0, albums: 1 }],
       },
       bestYear: {
-        winners: [group("1994", "1994", 0, 1)],
-        groups: [group("1994", "1994", 0, 1)],
-        unplacedAlbums: 0,
+        top: [group("1994", "1994", 0, 3)],
+        minAlbums: 3,
+        groups: [group("1994", "1994", 0, 3)],
+        unplacedAlbums: 2,
       },
-      bestDecade: noBest,
+      bestDecade: {
+        top: [group("1990", "1990s", 0, 3)],
+        minAlbums: 3,
+        groups: [group("1990", "1990s", 0, 3)],
+        unplacedAlbums: 2,
+      },
       bestGenre: {
-        winners: [group("Rock", "Rock", 0, 1)],
-        groups: [group("Rock", "Rock", 0, 1)],
+        top: [group("Rock", "Rock", 0, 3)],
+        minAlbums: 3,
+        groups: [group("Rock", "Rock", 0, 3), group("Jazz", "Jazz", 4, 1)],
         unplacedAlbums: 0,
       },
-      // A single album rated zero is a legitimate winner.
+      // Albums rated zero still rank.
       bestArtist: {
-        winners: [group(ALPHA, "Alpha", 0, 1)],
-        groups: [group(ALPHA, "Alpha", 0, 1)],
+        top: [group(ALPHA, "Alpha", 0, 3)],
+        minAlbums: 3,
+        groups: [group(ALPHA, "Alpha", 0, 3)],
         unplacedAlbums: 0,
       },
       favouriteTracks: [],
@@ -149,9 +157,6 @@ describe("Stats page", () => {
       "href",
       `/listen-list?artist=${ALPHA}`,
     );
-    expect(
-      within(listen).getByRole("link", { name: "1 album with an unknown release year" }),
-    ).toHaveAttribute("href", "/listen-list?yearUnknown=1");
     expect(within(listen).getByRole("link", { name: /Tagged Listen ASAP/ })).toHaveAttribute(
       "href",
       "/listen-list?tag=00000000-0000-7000-8000-000000000001",
@@ -185,31 +190,61 @@ describe("Stats page", () => {
     ).toEqual(["3", "2", "1", "0", "33%"]);
   });
 
-  it("shows a zero-rated single-album winner with its neutral sample count", async () => {
+  it("ranks a zero-rated artist with its sample count", async () => {
     renderApp("/stats");
     const best = await screen.findByRole("region", { name: "Best artist" });
     expect(within(best).getByRole("link", { name: "Alpha" })).toHaveAttribute(
       "href",
       `/collection?artist=${ALPHA}`,
     );
-    expect(best).toHaveTextContent("0 of 5 stars from 1 rated album.");
+    expect(best).toHaveTextContent("0 of 5 stars from 3 rated albums");
     expect(screen.getByText("Time listened (at least)")).toBeInTheDocument();
     expect(screen.getByText(/Incomplete: 1 track of unknown length/)).toBeInTheDocument();
   });
 
-  it("names every tied winner", async () => {
-    const tied: Best = {
-      winners: [group(ALPHA, "Alpha", 3, 2), group(BETA, "Beta", 3, 1)],
-      groups: [group(ALPHA, "Alpha", 3, 2), group(BETA, "Beta", 3, 1)],
+  it("lists the top three with enough rated albums, best first", async () => {
+    const GAMMA = "0190f5c3-0000-7000-8000-0000000000a3";
+    const ranked: Best = {
+      top: [group(ALPHA, "Alpha", 4, 3), group(BETA, "Beta", 3, 4), group(GAMMA, "Gamma", 2, 3)],
+      minAlbums: 3,
+      groups: [
+        group("solo", "Solo", 5, 1),
+        group(ALPHA, "Alpha", 4, 3),
+        group(BETA, "Beta", 3, 4),
+        group(GAMMA, "Gamma", 2, 3),
+        group("delta", "Delta", 1, 3),
+      ],
       unplacedAlbums: 0,
     };
     vi.mocked(statsOverview).mockResolvedValue(
-      stats({ collection: { ...stats().collection, bestArtist: tied } }),
+      stats({ collection: { ...stats().collection, bestArtist: ranked, bestYear: noBest } }),
     );
     renderApp("/stats");
     const best = await screen.findByRole("region", { name: "Best artist" });
-    expect(best).toHaveTextContent("Alpha and Beta");
-    expect(best).toHaveTextContent("3 of 5 stars each — tied, 2 rated albums and 1 rated album.");
+    expect(
+      within(best)
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(best).toHaveTextContent("3 of 5 stars from 4 rated albums");
+    expect(screen.getByRole("region", { name: "Best release year" })).toHaveTextContent(
+      "Nothing has 3 rated albums yet.",
+    );
+  });
+
+  it("drops undated notes, the listening-kind chart, and doubled decade suffixes", async () => {
+    renderApp("/stats");
+    const collection = await screen.findByRole("region", { name: "Collection" });
+    expect(collection).not.toHaveTextContent(/without a date|unknown original year/);
+    expect(screen.queryByText(/with an unknown release year/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("figure", { name: "How you listen" })).not.toBeInTheDocument();
+    const decades = screen.getByRole("figure", { name: "Average rating by decade" });
+    expect(within(decades).getByText("1990s")).toBeInTheDocument();
+    expect(within(decades).queryByText("1990ss")).not.toBeInTheDocument();
+    // Genres need three rated albums to be ranked: Jazz (one album) is left out.
+    const genres = screen.getByRole("figure", { name: "Highest-rated genres" });
+    expect(within(genres).queryByText("Jazz")).not.toBeInTheDocument();
+    expect(within(genres).getByText("Rock")).toBeInTheDocument();
   });
 
   it("charts ratings in half-star buckets and shows any chart as a table on request", async () => {

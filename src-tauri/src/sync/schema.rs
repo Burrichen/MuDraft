@@ -76,6 +76,7 @@ pub const SPECS: &[TableSpec] = &[
         ..table("album_source_tag")
     },
     table("listen_list_entry"),
+    table("listen_list_track"),
     table("collection_entry"),
     table("selection_session"),
     TableSpec {
