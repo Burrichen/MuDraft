@@ -253,6 +253,14 @@ pub async fn library_set_album_genres(
 }
 
 #[tauri::command]
+pub async fn library_reset_album_genres(
+    state: State<'_, AppState>,
+    album_id: String,
+) -> AppResult<Vec<String>> {
+    state.with_db(|db| db.write(|tx| metadata_import::reset_album_genres(tx, &album_id)))
+}
+
+#[tauri::command]
 pub fn genre_vocabulary() -> Vec<&'static str> {
     BROAD_GENRES.to_vec()
 }

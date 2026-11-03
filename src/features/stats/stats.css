@@ -466,18 +466,11 @@
 
 /* ---------------------------------------------------------------- stacked bars */
 
-.stack-group,
 .picks {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
   margin-top: var(--space-2);
-}
-
-.stack-block {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
 }
 
 .stack {
@@ -491,11 +484,6 @@
 .stack-seg {
   flex-basis: 0;
   min-width: 3px;
-}
-
-.stack-empty {
-  flex: 1;
-  background: var(--grid);
 }
 
 .stack-legend {
@@ -587,19 +575,35 @@
   background: var(--surface);
 }
 
-.best-winners {
-  font-size: var(--text-xl);
+.best-ranking {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding-inline-start: var(--space-5);
+}
+
+.best-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.best-entry::marker {
+  color: var(--text-muted);
+  font-weight: var(--weight-semibold);
+}
+
+.best-name {
+  color: var(--text);
+  font-size: var(--text-lg);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-tight);
   overflow-wrap: anywhere;
-}
-
-.best-winners a {
-  color: var(--text);
   text-decoration: none;
 }
 
-.best-winners a:hover {
+.best-name:hover {
   color: var(--accent-text);
   text-decoration: underline;
 }

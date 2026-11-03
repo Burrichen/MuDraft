@@ -43,8 +43,10 @@ export interface GroupScore {
 }
 
 export interface Best {
-  /** Every group tied for the highest mean. */
-  winners: GroupScore[];
+  /** The best groups with at least `minAlbums` rated albums (at most three). */
+  top: GroupScore[];
+  minAlbums: number;
+  /** All groups, best first. */
   groups: GroupScore[];
   unplacedAlbums: number;
 }

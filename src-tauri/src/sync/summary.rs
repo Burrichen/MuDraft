@@ -113,6 +113,7 @@ pub fn summarize(schema: &Schema, from: &State, to: &State) -> ChangeSummary {
                 | "album_genre"
                 | "album_source_tag"
                 | "listen_list_entry"
+                | "listen_list_track"
                 | "collection_entry" => col("album_id").and_then(Value::as_str).map(str::to_owned),
                 "track" => col("edition_id").and_then(|e| look.album_of_edition(e)),
                 "track_artist_credit" => col("track_id").and_then(|t| look.album_of_track(t)),
@@ -237,6 +238,7 @@ pub fn describe(schema: &Schema, conflict: &Conflict, states: [&State; 2]) -> St
         }
         "listen_event_track" => "Tracks heard in a listen".into(),
         "listen_list_entry" => format!("{} on the Listen List", album(&first)),
+        "listen_list_track" => format!("Listen List progress on {}", album(&first)),
         "collection_entry" => format!("{} in the Collection", edition(&first)),
         "album_artist_credit" => format!("Artists of {}", album(&first)),
         "album_genre" => format!("Genres of {}", album(&first)),

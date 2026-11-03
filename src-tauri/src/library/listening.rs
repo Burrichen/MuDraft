@@ -2,6 +2,9 @@
 //! edition, and exactly which known tracks it covered at that moment.
 //!
 //! - Logging is idempotent per request key, so a double click records one listen.
+//! - Only whole albums are logged. Older partial listens stay in the history as they
+//!   were; per-track progress while on the Listen List is separate (`listen_list_track`)
+//!   and is cleared when the album is logged.
 //! - A full-album listen snapshots the edition's tracks *as they are now*: tracks added
 //!   later (e.g. Deluxe bonus tracks from a refresh) are never retroactively listened.
 //!   If the edition had no tracklist, coverage is "unknown" until the user confirms it.
@@ -56,8 +59,6 @@ pub struct LogListen {
     pub kind: ListenKind,
     /// The user also listened before, at unknown times (recorded once per edition).
     pub earlier_undated: bool,
-    /// `None` = the whole album; otherwise exactly these tracks of the edition.
-    pub track_ids: Option<Vec<String>>,
     /// The Next Up pick this listen completes, if any.
     pub attempt_id: Option<String>,
 }
@@ -73,6 +74,9 @@ pub struct UndoLog {
     /// The Collection entry this log created (edition), to remove again.
     pub created_collection_for: Option<String>,
     pub completed_attempt: Option<String>,
+    /// Listen List progress (track IDs) cleared by this log, to put back.
+    #[serde(default)]
+    pub restore_progress: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -112,35 +116,13 @@ pub fn log(tx: &Transaction<'_>, key: Option<&str>, input: &LogListen) -> AppRes
         let listened_on = parse_date(input.listened_on.as_deref())?;
         let all_tracks = edition_tracks(tx, &edition_id)?;
 
-        let (is_full, covered, coverage) = match &input.track_ids {
-            None => {
-                let coverage = if all_tracks.is_empty() {
-                    "unknown"
-                } else {
-                    "tracks"
-                };
-                (true, all_tracks.clone(), coverage)
-            }
-            Some(ids) => {
-                let mut picked = Vec::new();
-                for raw in ids {
-                    let id = parse_uuid("track", raw)?;
-                    if !all_tracks.contains(&id) {
-                        return Err(AppError::validation(
-                            "tracks",
-                            format!("track {id} isn’t on this edition"),
-                        ));
-                    }
-                    if !picked.contains(&id) {
-                        picked.push(id);
-                    }
-                }
-                if picked.is_empty() {
-                    return Err(AppError::validation("tracks", "choose at least one track"));
-                }
-                (false, picked, "tracks")
-            }
+        let is_full = true;
+        let coverage = if all_tracks.is_empty() {
+            "unknown"
+        } else {
+            "tracks"
         };
+        let covered = all_tracks;
 
         let attempt = match &input.attempt_id {
             Some(raw) => {
@@ -207,8 +189,15 @@ pub fn log(tx: &Transaction<'_>, key: Option<&str>, input: &LogListen) -> AppRes
             params![edition_id, album_id],
         )? > 0;
 
+        // Listened in full: the Listen List progress has done its job.
+        let restore_progress = super::personal::listen_list_progress(tx, &album_id)?;
+        tx.execute(
+            "DELETE FROM listen_list_track WHERE album_id = ?1",
+            params![album_id],
+        )?;
+
         let mut restore_listen_list = None;
-        if is_full && settings::load(tx)?.full_listen_removes_from_listen_list {
+        if settings::load(tx)?.full_listen_removes_from_listen_list {
             let listed: Option<String> = tx
                 .query_row(
                     "SELECT edition_id FROM listen_list_entry WHERE album_id = ?1",
@@ -254,6 +243,7 @@ pub fn log(tx: &Transaction<'_>, key: Option<&str>, input: &LogListen) -> AppRes
                 restore_listen_list,
                 created_collection_for: added_to_collection.then(|| edition_id.clone()),
                 completed_attempt,
+                restore_progress,
             },
             listen_id,
         })
@@ -283,6 +273,16 @@ pub fn undo_log(tx: &Transaction<'_>, undo: &UndoLog) -> AppResult<()> {
             params![parse_uuid("album", album)?, parse_uuid("edition", edition)?],
         )?;
     }
+    for track in &undo.restore_progress {
+        // Only while the album is (again) listed and the track still exists.
+        tx.execute(
+            "INSERT INTO listen_list_track (album_id, track_id)
+             SELECT e.album_id, t.id FROM track t JOIN edition e ON e.id = t.edition_id
+             WHERE t.id = ?1 AND EXISTS (SELECT 1 FROM listen_list_entry l WHERE l.album_id = e.album_id)
+             ON CONFLICT DO NOTHING",
+            params![parse_uuid("track", track)?],
+        )?;
+    }
     if let Some(edition) = &undo.created_collection_for {
         let edition = parse_uuid("edition", edition)?;
         let other_listens: bool = tx.query_row(
@@ -309,6 +309,44 @@ pub fn undo_log(tx: &Transaction<'_>, undo: &UndoLog) -> AppResult<()> {
         )?;
     }
     Ok(())
+}
+
+/// A track-only listen as logged before only whole albums could be (test data for the
+/// history those older listens still form).
+#[cfg(test)]
+pub(crate) fn legacy_partial_listen(
+    tx: &Transaction<'_>,
+    edition_id: &str,
+    listened_on: Option<&str>,
+    kind: ListenKind,
+    track_ids: &[String],
+    earlier_undated: bool,
+) -> AppResult<String> {
+    let album_id = album_of_edition(tx, edition_id)?;
+    let id = new_id();
+    tx.execute(
+        "INSERT INTO listen_event (id, edition_id, album_id, listened_on, date_status, is_full, kind, coverage)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6, 'tracks')",
+        params![id, edition_id, album_id, listened_on, if listened_on.is_some() { "known" } else { "undated" }, kind.as_str()],
+    )?;
+    for track in track_ids {
+        tx.execute(
+            "INSERT INTO listen_event_track (listen_event_id, edition_id, track_id) VALUES (?1, ?2, ?3)",
+            params![id, edition_id, track],
+        )?;
+    }
+    if earlier_undated {
+        tx.execute(
+            "INSERT INTO listen_event (id, edition_id, album_id, listened_on, date_status, is_full, kind, coverage)
+             VALUES (?1, ?2, ?3, NULL, 'undated', 1, 'prior_history', 'unknown')",
+            params![new_id(), edition_id, album_id],
+        )?;
+    }
+    tx.execute(
+        "INSERT INTO collection_entry (edition_id, album_id, source) VALUES (?1, ?2, 'listen') ON CONFLICT DO NOTHING",
+        params![edition_id, album_id],
+    )?;
+    Ok(id)
 }
 
 /// Editable fields of a listen; also returned as the "before" state for undo.

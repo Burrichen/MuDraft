@@ -23,7 +23,9 @@ use crate::domain::dates::PartialDate;
 use crate::domain::ids::new_id;
 use crate::error::{AppError, AppResult};
 use crate::metadata::genres;
-use crate::metadata::{CreditPart, ReleaseDetail, ReleaseGroupDetail, TrackDetail, credit_text};
+use crate::metadata::{
+    CreditPart, ReleaseDetail, ReleaseGroupDetail, SourceTag, TrackDetail, credit_text,
+};
 
 const SOURCE: &str = "musicbrainz";
 /// Temporary offset so tracks can be renumbered without violating (disc, position) uniqueness.
@@ -834,4 +836,44 @@ pub fn set_album_genres_manually(
         params![album_id],
     )?;
     Ok(genres.iter().map(|g| (*g).to_owned()).collect())
+}
+
+/// Undo a manual genre correction offline: genres go back to the normalized provider
+/// genres stored at the last import (none for an album never matched), and later
+/// refreshes may replace them again.
+pub fn reset_album_genres(tx: &Transaction<'_>, album_id: &str) -> AppResult<Vec<String>> {
+    require(tx, Table::Album, album_id)?;
+    let (mut source_genres, mut source_tags) = (Vec::new(), Vec::new());
+    {
+        let mut stmt = tx.prepare(
+            "SELECT kind, name, votes FROM album_source_tag WHERE album_id = ?1 AND source = ?2",
+        )?;
+        let rows = stmt.query_map(params![album_id, SOURCE], |r| {
+            Ok((r.get::<_, String>(0)?, r.get(1)?, r.get(2)?))
+        })?;
+        for row in rows {
+            let (kind, name, votes) = row?;
+            let tag = SourceTag { name, votes };
+            if kind == "genre" {
+                source_genres.push(tag);
+            } else {
+                source_tags.push(tag);
+            }
+        }
+    }
+    let normalized = genres::normalize(&source_genres, &source_tags);
+    set_genres(tx, album_id, &normalized)?;
+    // Provider-linked genres return to MusicBrainz; a manual-only album has no source left.
+    tx.execute(
+        "DELETE FROM metadata_provenance
+         WHERE entity_type = 'album' AND entity_id = ?1 AND field = 'genres' AND source_ref IS NULL",
+        params![album_id],
+    )?;
+    tx.execute(
+        "UPDATE metadata_provenance SET source = ?2, is_override = 0,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE entity_type = 'album' AND entity_id = ?1 AND field = 'genres'",
+        params![album_id, SOURCE],
+    )?;
+    Ok(normalized.iter().map(|g| (*g).to_owned()).collect())
 }

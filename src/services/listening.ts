@@ -10,8 +10,6 @@ export interface LogListen {
   listenedOn: string | null;
   kind: ListenKind;
   earlierUndated: boolean;
-  /** null = whole album. */
-  trackIds: string[] | null;
   attemptId: string | null;
 }
 
@@ -21,6 +19,8 @@ export interface UndoLog {
   restoreListenList: [string, string] | null;
   createdCollectionFor: string | null;
   completedAttempt: string | null;
+  /** Listen List progress (track IDs) cleared by the log. */
+  restoreProgress: string[];
 }
 
 export interface Logged {
@@ -100,6 +100,12 @@ export async function logListen(requestId: string, listen: LogListen): Promise<L
 
 export async function undoLog(undo: UndoLog): Promise<void> {
   await callNative("listen_undo_log", { undo });
+  notifyLibraryChanged();
+}
+
+/** Tick a track off (or back on) for an album on the Listen List. Not a listen. */
+export async function markListenListTrack(trackId: string, marked: boolean): Promise<void> {
+  await callNative("listen_list_mark_track", { trackId, marked });
   notifyLibraryChanged();
 }
 

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{Table, album_of_edition, idempotency, optional_long_text, require, settings};
 use crate::domain::dates::{CalendarDate, ListenDate};
-use crate::domain::ids::new_id;
+use crate::domain::ids::{new_id, parse_uuid};
 use crate::domain::rating::HalfStars;
 use crate::error::{AppError, AppResult};
 
@@ -84,6 +84,66 @@ pub fn remove_from_listen_list(tx: &Transaction<'_>, album_id: &str) -> AppResul
         "DELETE FROM listen_list_entry WHERE album_id = ?1",
         params![album_id],
     )? > 0)
+}
+
+/// Tick a track off (or back on) while working through an album on the Listen List.
+/// Only tracks of the album's Listen List edition can be marked. This is progress, not a
+/// listen: it is cleared when the album is logged or leaves the List.
+pub fn mark_listen_list_track(tx: &Transaction<'_>, track_id: &str, marked: bool) -> AppResult<()> {
+    let track_id = parse_uuid("track", track_id)?;
+    let (edition_id, album_id): (String, String) = tx
+        .query_row(
+            "SELECT t.edition_id, e.album_id FROM track t JOIN edition e ON e.id = t.edition_id
+             WHERE t.id = ?1",
+            params![track_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?
+        .ok_or_else(|| AppError::not_found("track", &track_id))?;
+    let listed: Option<String> = tx
+        .query_row(
+            "SELECT edition_id FROM listen_list_entry WHERE album_id = ?1",
+            params![album_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    match listed {
+        None => {
+            return Err(AppError::validation(
+                "track",
+                "only albums on the Listen List can have tracks marked as listened",
+            ));
+        }
+        Some(listed) if listed != edition_id => {
+            return Err(AppError::validation(
+                "track",
+                "that track isn’t on the edition chosen for the Listen List",
+            ));
+        }
+        Some(_) => {}
+    }
+    if marked {
+        tx.execute(
+            "INSERT INTO listen_list_track (album_id, track_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+            params![album_id, track_id],
+        )?;
+    } else {
+        tx.execute(
+            "DELETE FROM listen_list_track WHERE album_id = ?1 AND track_id = ?2",
+            params![album_id, track_id],
+        )?;
+    }
+    Ok(())
+}
+
+/// Track IDs marked as listened on the album's Listen List entry.
+pub fn listen_list_progress(conn: &Connection, album_id: &str) -> AppResult<Vec<String>> {
+    let mut stmt = conn
+        .prepare("SELECT track_id FROM listen_list_track WHERE album_id = ?1 ORDER BY track_id")?;
+    let ids = stmt
+        .query_map(params![album_id], |r| r.get(0))?
+        .collect::<Result<_, _>>()?;
+    Ok(ids)
 }
 
 pub fn listen_list(conn: &Connection) -> AppResult<Vec<ListenListEntry>> {

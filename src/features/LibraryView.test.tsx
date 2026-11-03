@@ -415,6 +415,7 @@ describe("Collection", () => {
         restoreListenList: null,
         createdCollectionFor: null,
         completedAttempt: null,
+        restoreProgress: [],
       },
     };
     vi.mocked(logListen).mockResolvedValue(logged);
@@ -424,7 +425,6 @@ describe("Collection", () => {
     await user.click(screen.getByRole("button", { name: "Mark listened" }));
     expect(vi.mocked(logListen).mock.calls[0]?.[1]).toMatchObject({
       editionId: ITEMS[0]?.editionId,
-      trackIds: null,
     });
     await user.click(await screen.findByRole("button", { name: "Undo" }));
     expect(undoLog).toHaveBeenCalledWith(logged.undo);

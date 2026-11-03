@@ -14,7 +14,7 @@ import {
 } from "../../services/stats";
 import { BarTable } from "./BarTable";
 import { BestHighlight } from "./BestHighlight";
-import { ChartFrame, ColumnChart, StackedBar } from "./charts";
+import { ChartFrame, ColumnChart } from "./charts";
 import {
   continuousYears,
   durationParts,
@@ -23,6 +23,7 @@ import {
   halfStarBuckets,
   lastTwelveMonths,
   METHOD_LABEL,
+  oneDecimal,
   plural,
 } from "./format";
 import { StatCard } from "./StatCard";
@@ -32,9 +33,8 @@ const LISTEN_ASAP = "00000000-0000-7000-8000-000000000001";
 const TOP = 10;
 const TOP_GENRES = 8;
 
-/** Validated (dark surface) categorical slots, plus a neutral for "not specified". */
+/** Validated (dark surface) categorical slots. */
 const SERIES = ["var(--series-1)", "var(--series-2)", "var(--series-3)"] as const;
-const NEUTRAL = "var(--series-neutral)";
 
 type Load =
   | { kind: "loading" }
@@ -44,7 +44,6 @@ type Load =
 const list = (query: string) => `/listen-list?${query}`;
 const collection = (query: string) => `/collection?${query}`;
 const q = (key: string, value: string) => `${key}=${encodeURIComponent(value)}`;
-const oneDecimal = (n: number) => String(Math.round(n * 10) / 10);
 
 function Block({
   id,
@@ -139,7 +138,8 @@ function CollectionSection({ s }: { s: CollectionStats }) {
   const years = continuousYears(s.byYear);
   const buckets = halfStarBuckets(s.ratings.distribution);
   const decades = [...s.bestDecade.groups].sort((a, b) => Number(a.key) - Number(b.key));
-  const genres = [...s.bestGenre.groups]
+  const rankedGenres = s.bestGenre.groups.filter((g) => g.albums >= s.bestGenre.minAlbums);
+  const genres = [...rankedGenres]
     .sort((a, b) => b.meanStars - a.meanStars || b.albums - a.albums)
     .slice(0, TOP_GENRES);
   return (
@@ -192,9 +192,6 @@ function CollectionSection({ s }: { s: CollectionStats }) {
           valueHeading="Listens"
           rows={years.map((y) => ({ key: y.key, label: y.key, value: y.count }))}
           empty="No dated listens yet."
-          note={
-            n.undated > 0 ? `${plural(n.undated, "listen")} without a date not shown.` : undefined
-          }
         />
         <ColumnChart
           caption="Rating distribution"
@@ -221,59 +218,6 @@ function CollectionSection({ s }: { s: CollectionStats }) {
               : undefined
           }
         />
-        <ChartFrame
-          caption="How you listen"
-          subtitle={plural(n.first + n.relisten + n.unspecified, "listen")}
-          empty={n.first + n.relisten + n.unspecified === 0 ? "No listens yet." : undefined}
-          chart={
-            <div className="stack-group">
-              <StackedBar
-                label="First or again"
-                segments={[
-                  { key: "first", label: "First listens", value: n.first, color: SERIES[0] },
-                  { key: "relisten", label: "Re-listens", value: n.relisten, color: SERIES[1] },
-                  {
-                    key: "unspecified",
-                    label: "Not specified",
-                    value: n.unspecified,
-                    color: NEUTRAL,
-                  },
-                ]}
-              />
-              <StackedBar
-                label="Whole album or tracks"
-                segments={[
-                  { key: "full", label: "Whole album", value: n.fullAlbum, color: SERIES[0] },
-                  { key: "tracks", label: "Tracks only", value: n.tracksOnly, color: SERIES[2] },
-                ]}
-              />
-            </div>
-          }
-          table={() => (
-            <table className="stat-table">
-              <thead>
-                <tr>
-                  <th scope="col">Kind of listen</th>
-                  <th scope="col">Listens</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ["First listens", n.first],
-                  ["Re-listens", n.relisten],
-                  ["Not specified", n.unspecified],
-                  ["Whole album", n.fullAlbum],
-                  ["Tracks only", n.tracksOnly],
-                ].map(([label, value]) => (
-                  <tr key={String(label)}>
-                    <th scope="row">{label}</th>
-                    <td>{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        />
       </div>
 
       <div className="stats-subhead">
@@ -281,7 +225,8 @@ function CollectionSection({ s }: { s: CollectionStats }) {
         <p className="setting-hint">
           Rated Collection albums only. Each album counts once (its editions’ scores averaged),
           however often you’ve listened; zero is a rating. Years are original release years. Genres
-          overlap, so an album counts in each of its genres. Any number of albums can win.
+          overlap, so an album counts in each of its genres. Only years, decades, genres, and
+          artists with at least {s.bestYear.minAlbums} rated albums are ranked.
         </p>
       </div>
       <div className="best-grid">
@@ -289,13 +234,11 @@ function CollectionSection({ s }: { s: CollectionStats }) {
           title="Best release year"
           best={s.bestYear}
           href={(k) => collection(q("year", k))}
-          unplaced="with an unknown original year"
         />
         <BestHighlight
           title="Best decade"
           best={s.bestDecade}
           href={(k) => collection(q("decade", k))}
-          unplaced="with an unknown original year"
         />
         <BestHighlight
           title="Best genre"
@@ -315,23 +258,21 @@ function CollectionSection({ s }: { s: CollectionStats }) {
           subtitle="Out of 5 stars"
           valueHeading="Average rating"
           max={5}
-          rows={groupRows({ ...s.bestDecade, groups: decades }, (k) =>
-            collection(q("decade", k)),
-          ).map((r) => ({ ...r, label: `${r.label}s` }))}
+          rows={groupRows({ ...s.bestDecade, groups: decades }, (k) => collection(q("decade", k)))}
           empty="No rated albums with a known year yet."
         />
         <BarTable
           caption="Highest-rated genres"
           subtitle={
-            s.bestGenre.groups.length > TOP_GENRES
-              ? `Top ${String(TOP_GENRES)} of ${String(s.bestGenre.groups.length)}, out of 5 stars`
+            rankedGenres.length > TOP_GENRES
+              ? `Top ${String(TOP_GENRES)} of ${String(rankedGenres.length)}, out of 5 stars`
               : "Out of 5 stars"
           }
           valueHeading="Average rating"
           max={5}
           ranked
           rows={groupRows({ ...s.bestGenre, groups: genres }, (k) => collection(q("genre", k)))}
-          empty="No rated albums with a genre yet."
+          empty={`No genre has ${String(s.bestGenre.minAlbums)} rated albums yet.`}
         />
       </div>
     </>
@@ -392,13 +333,6 @@ function ListenListSection({ s }: { s: ListenListStats }) {
             href: list(q("decade", d.key)),
           }))}
           empty="No release years are known yet."
-          note={
-            s.unknownYears > 0 ? (
-              <Link to={list("yearUnknown=1")}>
-                {plural(s.unknownYears, "album")} with an unknown release year
-              </Link>
-            ) : undefined
-          }
         />
         <BarTable
           caption="Albums by genre"

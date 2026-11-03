@@ -45,7 +45,7 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 
 - Artist pages: ranked discography; album and track completion bars with counts and percentages. Explain catalogue coverage and how editions are counted.
 - Stats: equally prominent Listen List and Collection sections, including best-rated release year, genre, and artists.
-- NO minimum sample sizes, Bayesian adjustments, or suppressed small-sample results. Show counts without penalizing them.
+- Stats "Top rated" rankings list the top 3 groups and consider only groups with at least 3 rated albums. Elsewhere, NO minimum sample sizes, Bayesian adjustments, or suppressed small-sample results; show counts without penalizing them. "Various Artists" is not counted as an artist.
 
 ## 7. Portability and release
 

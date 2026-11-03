@@ -4,12 +4,6 @@ import { Dialog } from "../../components/Dialog";
 import { localToday, logListen, type ListenKind, type Logged } from "../../services/listening";
 import "./listening.css";
 
-export interface DialogTrack {
-  id: string;
-  label: string;
-  listened: boolean;
-}
-
 const KINDS: { value: ListenKind; label: string }[] = [
   { value: "first", label: "First listen" },
   { value: "relisten", label: "Re-listen" },
@@ -17,37 +11,33 @@ const KINDS: { value: ListenKind; label: string }[] = [
 ];
 
 /**
- * Log a listen: the whole album, or chosen tracks. Dates are the user's own calendar
+ * Log a listen of the whole album (only whole albums are logged; tracks are ticked off on
+ * the Listen List instead). Dates are the user's own calendar
  * dates (or unknown) — never invented. The request ID is fixed for the dialog's lifetime,
  * so double-clicking Save records one listen.
  */
 export function ListenDialog({
   albumTitle,
   editionId,
-  tracks,
   attemptId = null,
   onClose,
   onLogged,
 }: {
   albumTitle: string;
   editionId: string;
-  /** Present = log individual tracks instead of the whole album. */
-  tracks?: DialogTrack[];
   attemptId?: string | null;
   onClose: () => void;
   onLogged: (logged: Logged) => void;
 }) {
-  const ids = { date: useId(), unknown: useId(), kind: useId(), earlier: useId(), tracks: useId() };
+  const ids = { date: useId(), unknown: useId(), kind: useId(), earlier: useId() };
   const today = localToday();
   const [requestId] = useState(() => crypto.randomUUID());
   const [date, setDate] = useState(today);
   const [dateUnknown, setDateUnknown] = useState(false);
   const [kind, setKind] = useState<ListenKind>("unspecified");
   const [earlier, setEarlier] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const trackMode = tracks !== undefined;
 
   const reason = busy
     ? "Saving…"
@@ -55,9 +45,7 @@ export function ListenDialog({
       ? "Enter the date you listened, or tick “I don’t know the date”."
       : !dateUnknown && date > today
         ? "That date is in the future."
-        : trackMode && picked.size === 0
-          ? "Choose the tracks you listened to."
-          : undefined;
+        : undefined;
 
   const save = async () => {
     setBusy(true);
@@ -69,7 +57,6 @@ export function ListenDialog({
           listenedOn: dateUnknown ? null : date,
           kind,
           earlierUndated: earlier,
-          trackIds: trackMode ? [...picked] : null,
           attemptId,
         }),
       );
@@ -82,13 +69,13 @@ export function ListenDialog({
   return (
     <Dialog
       open
-      title={trackMode ? "Log tracks" : "Mark album listened"}
+      title="Mark album listened"
       onClose={onClose}
       actions={
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabledReason={reason} onClick={() => void save()}>
-            {trackMode ? "Log tracks" : "Mark listened"}
+            Mark listened
           </Button>
         </>
       }
@@ -146,33 +133,10 @@ export function ListenDialog({
           />
           I also listened before, but don’t know when
         </label>
-        {trackMode && (
-          <fieldset className="listen-tracks">
-            <legend id={ids.tracks}>Tracks you listened to</legend>
-            {tracks.map((t) => (
-              <label key={t.id} className="import-tag">
-                <input
-                  type="checkbox"
-                  checked={picked.has(t.id)}
-                  onChange={(e) => {
-                    const next = new Set(picked);
-                    if (e.target.checked) next.add(t.id);
-                    else next.delete(t.id);
-                    setPicked(next);
-                  }}
-                />
-                {t.label}
-                {t.listened && <span className="setting-hint"> (listened before)</span>}
-              </label>
-            ))}
-          </fieldset>
-        )}
-        {!trackMode && (
-          <p className="setting-hint">
-            Records the whole album and the tracks it has now. Tracks added to this edition later
-            aren’t counted as listened.
-          </p>
-        )}
+        <p className="setting-hint">
+          Records the whole album and the tracks it has now. Tracks added to this edition later
+          aren’t counted as listened.
+        </p>
         {error && (
           <p className="match-note match-note-error" role="alert">
             {error}

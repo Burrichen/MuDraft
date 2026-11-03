@@ -109,7 +109,9 @@ describe("MuDraft native journey", () => {
     await $('[aria-label="Best artist"]').waitForExist({
       timeoutMsg: '"Best artist" never appeared',
     });
-    await waitForText("0 of 5 stars from 1 rated album");
+    // One album is too few to rank, but the explicit zero still counts as a rating.
+    await waitForText("Nothing has 3 rated albums yet.");
+    await waitForText("1 rated album · 0 unrated");
   });
 
   it("exports the profile to a file", async () => {

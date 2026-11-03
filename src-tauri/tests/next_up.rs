@@ -418,7 +418,6 @@ fn provenance_manual_picks_and_completion_link_the_listen() {
                     listened_on: Some("2026-09-30".into()),
                     kind: ListenKind::First,
                     earlier_undated: false,
-                    track_ids: None,
                     attempt_id: Some(manual.attempt_id.clone()),
                 },
             )

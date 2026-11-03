@@ -15,6 +15,8 @@ import {
   type AlbumDetail,
 } from "../../services/album";
 import { removeFromCollection } from "../../services/library";
+import { markListenListTrack } from "../../services/listening";
+import { resetAlbumGenres, setAlbumGenres } from "../../services/metadata";
 import { renderApp } from "../../test/renderApp";
 import { NativeError } from "../../transport/native";
 import { setAlbumRating, setFavourite, setReview, setTrackRating } from "../../services/ratings";
@@ -48,6 +50,16 @@ vi.mock("../../services/library", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../services/library")>()),
   removeFromCollection: vi.fn(() => Promise.resolve(1)),
 }));
+vi.mock("../../services/listening", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/listening")>()),
+  markListenListTrack: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("../../services/metadata", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../services/metadata")>()),
+  genreVocabulary: vi.fn(() => Promise.resolve(["Rock", "Pop", "Electronic", "Jazz", "Folk"])),
+  setAlbumGenres: vi.fn((_: string, g: string[]) => Promise.resolve(g)),
+  resetAlbumGenres: vi.fn(() => Promise.resolve(["Rock", "Electronic"])),
+}));
 vi.mock("../../services/preferences", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../services/preferences")>()),
   updatePreferences: vi.fn((patch: object) =>
@@ -80,6 +92,7 @@ function track(n: number, title: string, lengthMs: number | null, extra = {}) {
     rating: null,
     favourite: false,
     listened: false,
+    marked: false,
     ...extra,
   };
 }
@@ -259,6 +272,136 @@ describe("Album page", () => {
     expect(unlockField).toHaveBeenCalledWith(ALBUM, "description");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(editAlbum).toHaveBeenCalledWith(ALBUM, { title: "OK Computer (mine)" });
+  });
+
+  it("ticks tracks off only while the shown edition is on the Listen List", async () => {
+    renderApp(`/albums/${ALBUM}`);
+    await screen.findByRole("table", { name: "Disc 1 of 2" });
+    expect(screen.queryByRole("button", { name: /^Listened to:/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Listened/)).toHaveClass("track-flag");
+  });
+
+  it("marks Listen List tracks as listened to, greying them out", async () => {
+    vi.mocked(albumDetail).mockResolvedValue(
+      detail({
+        editionId: STD,
+        discs: [
+          {
+            number: 1,
+            tracks: [
+              track(1, "Airbag", 284_000, { marked: true, listened: true }),
+              track(2, "Paranoid Android", 383_000),
+            ],
+          },
+        ],
+      }),
+    );
+    renderApp(`/albums/${ALBUM}`);
+    const airbag = await screen.findByRole("button", { name: "Listened to: Airbag" });
+    expect(airbag).toHaveAttribute("aria-pressed", "true");
+    expect(airbag.closest("tr")).toHaveClass("track-marked");
+    expect(screen.queryByText(/· Listened/)).not.toBeInTheDocument();
+    const android = screen.getByRole("button", { name: "Listened to: Paranoid Android" });
+    expect(android).toHaveAttribute("aria-pressed", "false");
+    expect(android.closest("tr")).not.toHaveClass("track-marked");
+    // The eye sits before the heart.
+    const controls = android.parentElement as HTMLElement;
+    expect(controls.firstElementChild).toBe(android);
+    await userEvent.click(android);
+    expect(markListenListTrack).toHaveBeenCalledWith("t2", true);
+    await userEvent.click(airbag);
+    expect(markListenListTrack).toHaveBeenCalledWith("t1", false);
+  });
+
+  it("shows the highest and lowest rated tracks for an album in the Collection", async () => {
+    vi.mocked(albumDetail).mockResolvedValue(
+      detail({
+        discs: [
+          {
+            number: 1,
+            tracks: [
+              track(1, "Airbag", 284_000, { rating: 8 }),
+              track(2, "Lucky", null, { rating: 0 }),
+              track(3, "Exit Music", null),
+            ],
+          },
+          { number: 2, tracks: [track(1, "Lucky (live)", 270_000, { rating: 8 })] },
+        ],
+      }),
+    );
+    renderApp(`/albums/${ALBUM}`);
+    const section = await screen.findByRole("region", { name: "Track ratings" });
+    const highest = within(section).getByRole("heading", { name: "Highest rated track" })
+      .parentElement as HTMLElement;
+    expect(highest).toHaveTextContent("4 of 5 stars");
+    expect(
+      within(highest)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Airbag", "Lucky (live)"]);
+    const lowest = within(section).getByRole("heading", { name: "Lowest rated track" })
+      .parentElement as HTMLElement;
+    expect(lowest).toHaveTextContent("0 of 5 stars");
+    expect(within(lowest).getByRole("listitem")).toHaveTextContent("Lucky");
+  });
+
+  it("asks for track ratings first, and leaves the section out before the Collection", async () => {
+    vi.mocked(albumDetail).mockResolvedValue(
+      detail({ discs: [{ number: 1, tracks: [track(1, "Airbag", 284_000)] }] }),
+    );
+    const { unmount } = renderApp(`/albums/${ALBUM}`);
+    expect(
+      await screen.findByText("Rate tracks above to see your highest and lowest rated."),
+    ).toBeInTheDocument();
+    unmount();
+
+    const base = detail();
+    vi.mocked(albumDetail).mockResolvedValue(
+      detail({ editions: base.editions.map((e) => ({ ...e, inCollection: false })) }),
+    );
+    renderApp(`/albums/${ALBUM}`);
+    await screen.findByRole("heading", { level: 1, name: "OK Computer" });
+    expect(screen.queryByRole("region", { name: "Track ratings" })).not.toBeInTheDocument();
+  });
+
+  it("overrides genres by hand, capped at three", async () => {
+    renderApp(`/albums/${ALBUM}`);
+    expect(await screen.findByText("Rock · Electronic")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset to default" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Edit genres for OK Computer" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit genres" });
+    const genres = await within(dialog).findByRole("group", { name: "Genres" });
+    expect(within(genres).getByRole("button", { name: "Rock" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await userEvent.click(within(genres).getByRole("button", { name: "Jazz" }));
+    await userEvent.click(within(genres).getByRole("button", { name: "Folk" }));
+    const save = within(dialog).getByRole("button", { name: "Save" });
+    expect(save).toHaveAccessibleDescription("Choose at most 3 genres.");
+    await userEvent.click(save);
+    expect(setAlbumGenres).not.toHaveBeenCalled();
+
+    await userEvent.click(within(genres).getByRole("button", { name: "Electronic" }));
+    await userEvent.click(save);
+    expect(setAlbumGenres).toHaveBeenCalledWith(ALBUM, ["Rock", "Jazz", "Folk"]);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  it("resets hand-picked genres to the defaults", async () => {
+    vi.mocked(albumDetail).mockResolvedValue(
+      detail({ genres: ["Jazz"], lockedFields: ["genres"] }),
+    );
+    renderApp(`/albums/${ALBUM}`);
+    expect(await screen.findByText("Edited by you")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Reset to default" }));
+    expect(resetAlbumGenres).toHaveBeenCalledWith(ALBUM);
+    expect(await screen.findByText("Genres reset to Rock · Electronic.")).toHaveAttribute(
+      "role",
+      "status",
+    );
   });
 
   it("refreshes from MusicBrainz and reports kept edits", async () => {

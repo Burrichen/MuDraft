@@ -26,6 +26,16 @@ pub async fn listen_undo_log(state: State<'_, AppState>, undo: UndoLog) -> AppRe
     state.with_db(|db| db.write(|tx| listening::undo_log(tx, &undo)))
 }
 
+/// Tick a track off (or back on) for an album on the Listen List.
+#[tauri::command]
+pub async fn listen_list_mark_track(
+    state: State<'_, AppState>,
+    track_id: String,
+    marked: bool,
+) -> AppResult<()> {
+    state.with_db(|db| db.write(|tx| personal::mark_listen_list_track(tx, &track_id, marked)))
+}
+
 /// Returns the previous values so the correction can be undone.
 #[tauri::command]
 pub async fn listen_correct(

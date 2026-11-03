@@ -82,6 +82,8 @@ The status is worked out again whenever MuDraft opens, so pending changes and un
 
 If the same thing was changed differently on both computers (the same album title, review, rating, tag, or list), MuDraft doesn't guess. It lists each record and field with both values, and you choose **Keep this computer's version** or **Keep GitHub's version**. You can also use **Keep all from this computer** or **Keep all from GitHub**.
 
+An album's genres and whether you edited them are one choice: if you edit genres on one computer and use **Reset to default** on the other, you get one conflict, and the side you keep brings its genres and its edited/default state together.
+
 - **Cancel** leaves both sides exactly as they were. Your other changes stay pending, and choices you've already made are remembered until you finish.
 - **Apply choices and sync** becomes available once every conflict has a choice.
 

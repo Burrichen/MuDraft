@@ -128,6 +128,7 @@ pub fn merge(schema: &Schema, input: &Inputs<'_>) -> Merged {
             base_known: input.base_known,
             conflicts: BTreeMap::new(),
         };
+        cx.link_genre_locks(&mut forced);
         let mut m = cx.merge_rows(&forced);
         cx.fix_references(&mut m);
         let grew = cx.check_unique(&m, &mut forced);
@@ -477,6 +478,143 @@ impl Ctx<'_> {
                 l.clone()
             }
         }
+    }
+
+    // ------------------------------------------------------------ genres
+
+    /// An album's genres and their "edited by you" lock (its `genres` provenance) are one
+    /// choice. Merged separately, an edit on one computer and a reset on the other could
+    /// keep the edited genres but drop their lock (or the reverse). So when both sides
+    /// changed either part differently, that is one conflict, and the chosen side's genres
+    /// and lock are taken together.
+    fn link_genre_locks(&mut self, forced: &mut HashMap<(String, String), Side>) {
+        let schema = self.schema;
+        let (Some(gs), Some(ps)) = (
+            schema.table("album_genre"),
+            schema.table("metadata_provenance"),
+        ) else {
+            return;
+        };
+        let (Some(g_album), Some(p_type), Some(p_id), Some(p_field)) = (
+            gs.col("album_id"),
+            ps.col("entity_type"),
+            ps.col("entity_id"),
+            ps.col("field"),
+        ) else {
+            return;
+        };
+        let is_lock = |row: &Row| {
+            row[p_type].as_str() == Some("album") && row[p_field].as_str() == Some("genres")
+        };
+        let mut albums: BTreeSet<String> = BTreeSet::new();
+        for s in [self.b, self.l, self.r] {
+            albums.extend(
+                s.rows(gs.name)
+                    .values()
+                    .filter_map(|row| row[g_album].as_str().map(str::to_owned)),
+            );
+            albums.extend(
+                s.rows(ps.name)
+                    .values()
+                    .filter(|row| is_lock(row))
+                    .filter_map(|row| row[p_id].as_str().map(str::to_owned)),
+            );
+        }
+        // (genre rows, lock row) of one album on one side.
+        let parts = |s: &State, album: &str| {
+            let genres: BTreeMap<String, Row> = s
+                .rows(gs.name)
+                .iter()
+                .filter(|(_, row)| row[g_album].as_str() == Some(album))
+                .map(|(k, row)| (k.clone(), row.clone()))
+                .collect();
+            let lock = s
+                .rows(ps.name)
+                .iter()
+                .find(|(_, row)| is_lock(row) && row[p_id].as_str() == Some(album))
+                .map(|(k, row)| (k.clone(), row.clone()));
+            (genres, lock)
+        };
+        let unit = |(genres, lock): &(BTreeMap<String, Row>, Option<(String, Row)>)| {
+            serde_json::json!([
+                group_value(genres, gs),
+                full(ps, lock.as_ref().map(|(_, row)| row))
+            ])
+        };
+        for album in albums {
+            let (b, l, r) = (
+                parts(self.b, &album),
+                parts(self.l, &album),
+                parts(self.r, &album),
+            );
+            let (ub, ul, ur) = (unit(&b), unit(&l), unit(&r));
+            if ul == ur || ul == ub || ur == ub {
+                continue;
+            }
+            let group = id_key(&album);
+            let id = conflict_id("collection", gs.name, &group, "genres", &ul, &ur);
+            let side = match self.res.get(id.as_str()) {
+                Some(&side) => side,
+                None => {
+                    let shown = |s: &State, p: &(BTreeMap<String, Row>, Option<(String, Row)>)| {
+                        self.genre_choice(s, gs, ps, p)
+                    };
+                    self.push(Conflict {
+                        id,
+                        record: String::new(),
+                        kind: ConflictKind::Collection,
+                        table: gs.name.to_owned(),
+                        key: parse(&group),
+                        columns: gs
+                            .collection
+                            .iter()
+                            .map(|&i| gs.columns[i].clone())
+                            .collect(),
+                        base: shown(self.b, &b),
+                        local: shown(self.l, &l),
+                        remote: shown(self.r, &r),
+                    });
+                    Side::Local
+                }
+            };
+            for (genres, lock) in [&l, &r] {
+                for k in genres.keys() {
+                    forced.insert((gs.name.to_owned(), k.clone()), side);
+                }
+                if let Some((k, _)) = lock {
+                    forced.insert((ps.name.to_owned(), k.clone()), side);
+                }
+            }
+        }
+    }
+
+    /// One side's genres as the user would describe them: names in order, and whether
+    /// they are kept as edited.
+    fn genre_choice(
+        &self,
+        s: &State,
+        gs: &TableSchema,
+        ps: &TableSchema,
+        (genres, lock): &(BTreeMap<String, Row>, Option<(String, Row)>),
+    ) -> Value {
+        let name_of = |id: &Value| {
+            let ts = self.schema.table("genre")?;
+            let row = s.row(ts.name, &id_key(id.as_str()?))?;
+            row[ts.col("name")?].as_str().map(str::to_owned)
+        };
+        let mut rows: Vec<&Row> = genres.values().collect();
+        if let Some(pos) = gs.col("position") {
+            rows.sort_by_key(|row| row[pos].as_i64());
+        }
+        let names: Vec<String> = rows
+            .iter()
+            .filter_map(|row| name_of(&row[gs.col("genre_id")?]))
+            .collect();
+        let edited = lock
+            .as_ref()
+            .zip(ps.col("is_override"))
+            .is_some_and(|((_, row), i)| row[i].as_i64() == Some(1));
+        serde_json::json!({ "genres": names, "edited": edited })
     }
 
     // ------------------------------------------------------------ references

@@ -49,6 +49,8 @@ export interface TrackView {
   rating: number | null;
   favourite: boolean;
   listened: boolean;
+  /** Marked as listened on the Listen List (progress, not a logged listen). */
+  marked: boolean;
 }
 
 export interface AlbumDetail {

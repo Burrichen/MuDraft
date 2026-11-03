@@ -25,7 +25,6 @@ fn full(ed: &str, date: Option<&str>, kind: ListenKind) -> LogListen {
         listened_on: date.map(Into::into),
         kind,
         earlier_undated: false,
-        track_ids: None,
         attempt_id: None,
     }
 }
@@ -133,55 +132,106 @@ fn relistens_add_events_not_album_entries_and_ratings_stay_independent() {
 }
 
 #[test]
-fn partial_track_listens_cover_only_those_tracks() {
+fn only_whole_albums_can_be_logged() {
     let (_d, mut db) = open_temp();
-    let (al, ed, t) = setup(&mut db, "Partial", 3);
+    let (_, ed, t) = setup(&mut db, "Whole", 2);
+    let ipc = serde_json::json!({
+        "editionId": ed, "listenedOn": null, "kind": "first", "earlierUndated": false,
+        "trackIds": [t[0]], "attemptId": null,
+    });
+    assert!(
+        serde_json::from_value::<LogListen>(ipc).is_err(),
+        "a track list is refused at the boundary"
+    );
+    let out = log(&mut db, &full(&ed, None, ListenKind::First));
+    assert!(out.is_full);
+    assert_eq!(out.covered_tracks, 2);
+}
+
+fn marked_titles(db: &Database, al: &str) -> Vec<(String, bool)> {
+    db.read(|c| album_view::detail(c, al, None))
+        .unwrap()
+        .discs
+        .iter()
+        .flat_map(|d| d.tracks.iter().map(|t| (t.title.clone(), t.marked)))
+        .collect()
+}
+
+#[test]
+fn listen_list_progress_is_kept_until_the_album_is_logged() {
+    let (_d, mut db) = open_temp();
+    let (al, ed, t) = setup(&mut db, "Progress", 3);
+    let mark = |db: &mut Database, track: &str, on: bool| {
+        db.write(|tx| personal::mark_listen_list_track(tx, track, on))
+    };
+    assert_eq!(
+        mark(&mut db, &t[0], true).unwrap_err().code(),
+        "validation",
+        "only while on the Listen List"
+    );
     db.write(|tx| personal::add_to_listen_list(tx, &ed))
         .unwrap();
-    let out = log(
-        &mut db,
-        &LogListen {
-            track_ids: Some(vec![t[1].clone(), t[1].clone()]),
-            ..full(&ed, Some("2026-10-01"), ListenKind::Unspecified)
-        },
-    );
-    assert!(
-        !out.is_full && !out.removed_from_listen_list,
-        "partial listens keep the album listed"
-    );
-    assert_eq!(out.covered_tracks, 1);
+    mark(&mut db, &t[0], true).unwrap();
+    mark(&mut db, &t[1], true).unwrap();
+    mark(&mut db, &t[1], true).unwrap();
+    mark(&mut db, &t[0], false).unwrap();
     assert_eq!(
-        listened_titles(&db, &al),
+        marked_titles(&db, &al),
         vec![
             ("Track 1".into(), false),
             ("Track 2".into(), true),
             ("Track 3".into(), false)
         ]
     );
+    assert_eq!(
+        listened_titles(&db, &al),
+        vec![
+            ("Track 1".into(), false),
+            ("Track 2".into(), false),
+            ("Track 3".into(), false)
+        ],
+        "progress is not a listen"
+    );
+    let (other_al, other_ed, other) = setup(&mut db, "Other", 1);
+    db.write(|tx| personal::add_to_listen_list(tx, &other_ed))
+        .unwrap();
+    let (deluxe, deluxe_tracks) = edition(&mut db, &al, "Deluxe", 1);
+    assert_ne!(deluxe, ed);
+    assert_eq!(
+        mark(&mut db, &deluxe_tracks[0], true).unwrap_err().code(),
+        "validation",
+        "only the Listen List edition's tracks"
+    );
+    assert_eq!(
+        mark(&mut db, &new_id(), true).unwrap_err().code(),
+        "not_found"
+    );
 
-    let (_, _, other) = setup(&mut db, "Other", 1);
-    let err = db.write(|tx| {
-        listening::log(
+    // Logging the album clears its progress (moving it to the Collection); undo restores it.
+    let out = log(&mut db, &full(&ed, None, ListenKind::First));
+    assert!(out.removed_from_listen_list && out.added_to_collection);
+    assert_eq!(count(&db, "listen_list_track"), 0);
+    db.write(|tx| listening::undo_log(tx, &out.undo)).unwrap();
+    assert_eq!(marked_titles(&db, &al)[1], ("Track 2".into(), true));
+
+    // Kept on the List after a full listen: progress is still cleared.
+    db.write(|tx| {
+        settings::save(
             tx,
-            None,
-            &LogListen {
-                track_ids: Some(other.clone()),
-                ..full(&ed, None, ListenKind::First)
+            &Settings {
+                full_listen_removes_from_listen_list: false,
             },
         )
-    });
-    assert_eq!(err.unwrap_err().code(), "validation");
-    let none = db.write(|tx| {
-        listening::log(
-            tx,
-            None,
-            &LogListen {
-                track_ids: Some(vec![]),
-                ..full(&ed, None, ListenKind::First)
-            },
-        )
-    });
-    assert_eq!(none.unwrap_err().code(), "validation");
+    })
+    .unwrap();
+    log(&mut db, &full(&ed, None, ListenKind::Relisten));
+    assert!(marked_titles(&db, &al).iter().all(|(_, m)| !m));
+
+    // Leaving the List any other way drops its progress too.
+    mark(&mut db, &other[0], true).unwrap();
+    db.write(|tx| personal::remove_from_listen_list(tx, &other_al))
+        .unwrap();
+    assert_eq!(count(&db, "listen_list_track"), 0);
 }
 
 #[test]
@@ -252,10 +302,7 @@ fn correcting_and_deleting_are_undoable_and_recompute_progress() {
     let first = log(&mut db, &full(&ed, Some("2026-09-01"), ListenKind::First));
     let second = log(
         &mut db,
-        &LogListen {
-            track_ids: Some(vec![t[0].clone()]),
-            ..full(&ed, Some("2026-09-20"), ListenKind::Relisten)
-        },
+        &full(&ed, Some("2026-09-20"), ListenKind::Relisten),
     );
 
     let before = db
@@ -295,7 +342,7 @@ fn correcting_and_deleting_are_undoable_and_recompute_progress() {
         .unwrap();
     assert_eq!(
         listened_titles(&db, &al),
-        vec![("Track 1".into(), true), ("Track 2".into(), false)],
+        vec![("Track 1".into(), true), ("Track 2".into(), true)],
         "other evidence remains"
     );
     assert_eq!(

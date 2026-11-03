@@ -176,7 +176,37 @@
   gap: var(--space-2);
 }
 
+.mark-button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+/* Ticked off on the Listen List: the title and length recede; controls stay readable. */
+.track-marked .track-title,
+.track-marked .track-num,
+.track-marked .track-len {
+  color: var(--text-subtle);
+}
+
 .favourite-button[aria-pressed="true"] {
   border-color: var(--danger);
   color: var(--danger);
+}
+
+.track-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-4);
+}
+
+.track-highlight {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+.track-highlight-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }

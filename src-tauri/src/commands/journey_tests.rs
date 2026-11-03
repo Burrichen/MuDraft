@@ -222,7 +222,6 @@ async fn full_journey_from_csv_to_restore() {
                         listened_on: Some("2026-09-30".into()),
                         kind: ListenKind::Relisten,
                         earlier_undated: true,
-                        track_ids: None,
                         attempt_id: Some(shown.attempt_id.clone()),
                     },
                 )
@@ -255,7 +254,6 @@ async fn full_journey_from_csv_to_restore() {
                         listened_on: None,
                         kind: ListenKind::Unspecified,
                         earlier_undated: false,
-                        track_ids: None,
                         attempt_id: None,
                     },
                 )
@@ -308,7 +306,11 @@ async fn full_journey_from_csv_to_restore() {
         .with_db(|db| db.read(|c| stats::overview(c, "2026-10-02T00:00:00.000Z")))
         .unwrap();
     assert_eq!(overview.collection.ratings.rated_albums, 1);
-    assert_eq!(overview.collection.best_artist.winners[0].label, "Björk");
+    assert_eq!(overview.collection.best_artist.groups[0].label, "Björk");
+    assert!(
+        overview.collection.best_artist.top.is_empty(),
+        "one rated album is too few to rank"
+    );
     assert_eq!(overview.collection.listens.historical, 1);
     assert_eq!(overview.collection.listens.undated, 1);
     let guided_stats = overview
