@@ -6,15 +6,13 @@
 - **Prompts 22–23 — private GitHub sync**: engine in `src-tauri/src/sync/`, Settings → GitHub Sync UI, `docs/SYNC.md`.
 - **Prompt 24 — 1.2.0 release**: `.github/workflows/release.yml` builds the NSIS x64 setup `.exe` and a universal ad-hoc-signed `.dmg` from one commit into one draft release with `SHA256SUMS.txt`. Optional signing secrets. Docs: `docs/RELEASE.md`, `docs/MACOS.md`, `docs/RELEASE_ACCEPTANCE.md`.
 
-- **`feature/genre-overrides`**: editable genres with reset; whole-album logging; Listen List eye marks per track; Collection track highlights; stats fixes (top 3, min 3 albums, no Various Artists). `npm run check` passes; app untried.
+- **1.3.0 release** (`release/v1.3.0`): PR #4 merged (editable genres with reset, whole-album logging, Listen List track marks, track highlights, stats fixes; schema v13). 1.2.0 was never published; 1.3.0 supersedes it.
 
-## Checks run (Release run 39595028911, commit e37c0f7)
+## Checks run
 
-- Test gates (Windows, macOS): `npm run check`, 239 web + 151 Rust tests, including the two-device acceptance journey; real Keychain and Credential Manager round trips.
-- Windows: installed the published 1.1.0 → Start-menu launch → restart → upgrade to 1.2.0 → uninstall, profile kept.
-- DMG on Apple Silicon (arm64 and Rosetta x86_64) and Intel runners: layout, plist, `lipo`, ad-hoc `codesign`, LaunchServices launch, restart, upgrade from a 0.9.0-labelled build of the same code (no earlier macOS release exists), uninstall.
-- Draft `v1.2.0` assets and checksums inspected; not published.
-- Skipped: `live-sync` (no test secrets). Untested: Developer ID and Authenticode signing paths, quarantined-download Gatekeeper prompt.
+- PR #4 CI (run 41609205017): check and native E2E pass on Windows and macOS. macOS E2E restore step flaked once (missing `backups`), passed on re-run.
+- `npm run check` and `check-version.mjs` locally on `release/v1.3.0`.
+- 1.2.0 platform checks: see Release run 39595028911. Skipped: `live-sync`. Untested: signing paths, Gatekeeper prompt.
 
 ## Blockers
 
@@ -22,4 +20,4 @@
 
 ## Next step
 
-Run `docs/RELEASE_ACCEPTANCE.md` with the draft's files, then publish.
+Check the `release/v1.3.0` Release run, run `docs/RELEASE_ACCEPTANCE.md` with the draft v1.3.0 files, merge the release PR, then publish. Delete the stale v1.2.0 draft.
