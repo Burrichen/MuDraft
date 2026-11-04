@@ -71,15 +71,6 @@ function Block({
 
 function Hero({ s }: { s: CollectionStats }) {
   const r = s.runtime;
-  const hint = r.complete
-    ? `across ${plural(r.sessions, "listening session")}`
-    : `Incomplete: ${[
-        r.tracksWithoutLength > 0 && plural(r.tracksWithoutLength, "track") + " of unknown length",
-        r.listensWithoutTracklist > 0 &&
-          plural(r.listensWithoutTracklist, "listen") + " without a tracklist",
-      ]
-        .filter(Boolean)
-        .join(", ")}`;
   return (
     <div className="hero-figure">
       <span className="hero-eyebrow">
@@ -94,7 +85,7 @@ function Hero({ s }: { s: CollectionStats }) {
           </span>
         ))}
       </span>
-      <span className="hero-hint">{hint}</span>
+      <span className="hero-hint">across {plural(r.sessions, "listening session")}</span>
     </div>
   );
 }
@@ -147,21 +138,21 @@ function CollectionSection({ s }: { s: CollectionStats }) {
       <div className="stats-hero">
         <Hero s={s} />
         <ul className="stat-cards" aria-label="Collection overview">
-          <StatCard label="Albums in Collection" value={String(s.albums)} href="/collection" />
+          <StatCard
+            label="Unique albums in Collection"
+            value={String(s.albums)}
+            href="/collection"
+          />
+          <StatCard label="Total listens" value={String(n.dated + n.undated)} />
           <StatCard
             label="Albums listened to"
             value={String(s.distinctListenedAlbums)}
             href={collection("sort=recently_listened")}
           />
           <StatCard
-            label="Dated listens"
-            value={String(n.dated)}
-            hint={`${plural(n.undated, "undated listen")} · ${plural(n.historical, "earlier-history note")}`}
-          />
-          <StatCard
             label="Average rating"
             value={<RatingValue stars={s.ratings.averageStars} />}
-            hint={`${plural(s.ratings.ratedAlbums, "rated album")} · ${String(s.ratings.unratedAlbums)} unrated`}
+            hint={plural(s.ratings.ratedAlbums, "rated album")}
             href={collection("sort=rating_highest")}
           />
           <StatCard
@@ -212,11 +203,6 @@ function CollectionSection({ s }: { s: CollectionStats }) {
             display: plural(b.albums, "album"),
           }))}
           empty="No rated albums yet."
-          note={
-            s.ratings.unratedAlbums > 0
-              ? `${plural(s.ratings.unratedAlbums, "unrated album")} not shown.`
-              : undefined
-          }
         />
       </div>
 
@@ -244,7 +230,6 @@ function CollectionSection({ s }: { s: CollectionStats }) {
           title="Best genre"
           best={s.bestGenre}
           href={(k) => collection(q("genre", k))}
-          unplaced="without a genre"
         />
         <BestHighlight
           title="Best artist"
@@ -311,15 +296,7 @@ function ListenListSection({ s }: { s: ListenListStats }) {
           }
           href={list("sort=added_oldest")}
         />
-        <StatCard
-          label="Known runtime"
-          value={formatDuration(s.runtime.knownMs)}
-          hint={
-            s.runtime.editionsUnknown > 0
-              ? `${plural(s.runtime.editionsUnknown, "album")} with unknown length not included`
-              : "Every album’s length is known"
-          }
-        />
+        <StatCard label="Runtime" value={formatDuration(s.runtime.knownMs)} />
       </ul>
       <div className="stats-grid">
         <ColumnChart
@@ -345,11 +322,7 @@ function ListenListSection({ s }: { s: ListenListStats }) {
             href: list(q("genre", g.label)),
           }))}
           empty="No genres yet."
-          note={`${s.genres.length > TOP ? `Top ${String(TOP)} of ${String(s.genres.length)}. ` : ""}Genres overlap: an album counts once in each of its genres.${
-            s.albumsWithoutGenre > 0
-              ? ` ${plural(s.albumsWithoutGenre, "album")} without a genre.`
-              : ""
-          }`}
+          note={`${s.genres.length > TOP ? `Top ${String(TOP)} of ${String(s.genres.length)}. ` : ""}Genres overlap: an album counts once in each of its genres.`}
         />
         <BarTable
           caption="Most-listed artists"

@@ -11,13 +11,10 @@ export function BestHighlight({
   title,
   best,
   href,
-  unplaced,
 }: {
   title: string;
   best: Best;
   href: (key: string) => string;
-  /** e.g. "without a genre". */
-  unplaced?: string;
 }) {
   return (
     <section className="best" aria-label={title}>
@@ -43,11 +40,6 @@ export function BestHighlight({
             </li>
           ))}
         </ol>
-      )}
-      {best.unplacedAlbums > 0 && unplaced && (
-        <p className="setting-hint">
-          {plural(best.unplacedAlbums, "rated album")} {unplaced} not included.
-        </p>
       )}
     </section>
   );

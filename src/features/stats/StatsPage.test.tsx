@@ -199,7 +199,30 @@ describe("Stats page", () => {
     );
     expect(best).toHaveTextContent("0 of 5 stars from 3 rated albums");
     expect(screen.getByText("Time listened (at least)")).toBeInTheDocument();
-    expect(screen.getByText(/Incomplete: 1 track of unknown length/)).toBeInTheDocument();
+    expect(screen.getByText("across 3 listening sessions")).toBeInTheDocument();
+  });
+
+  it("leads with unique albums and total listens, and leaves out missing-data notes", async () => {
+    renderApp("/stats");
+    const overview = await screen.findByRole("list", { name: "Collection overview" });
+    const cards = within(overview)
+      .getAllByRole("listitem")
+      .map((c) => c.textContent);
+    expect(cards.slice(0, 3)).toEqual([
+      "2Unique albums in Collection",
+      // Three dated listens plus one undated.
+      "4Total listens",
+      "2Albums listened to",
+    ]);
+    expect(
+      within(overview).getByRole("link", { name: /Unique albums in Collection/ }),
+    ).toHaveAttribute("href", "/collection");
+    // The fixture has an undated listen, an unrated album, albums without a genre or year,
+    // and tracks of unknown length: none of that is called out.
+    const page = screen.getByRole("region", { name: "Collection" }).parentElement;
+    expect(page).not.toHaveTextContent(
+      /undated|unrated|without a genre|unknown length|Incomplete|not included|not shown|earlier-history/i,
+    );
   });
 
   it("lists the top three with enough rated albums, best first", async () => {

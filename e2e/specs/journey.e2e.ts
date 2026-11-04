@@ -111,7 +111,7 @@ describe("MuDraft native journey", () => {
     });
     // One album is too few to rank, but the explicit zero still counts as a rating.
     await waitForText("Nothing has 3 rated albums yet.");
-    await waitForText("1 rated album · 0 unrated");
+    await waitForText("1 rated album");
   });
 
   it("exports the profile to a file", async () => {
