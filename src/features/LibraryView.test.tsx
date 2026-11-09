@@ -198,6 +198,27 @@ describe("Listen List", () => {
     expect(lastQuery()).toMatchObject({ genres: ["Pop"], tagIds: [ROAD.id] });
   });
 
+  it("cycles a tag bubble from only-with, to without (red), to off", async () => {
+    renderApp("/listen-list");
+    await screen.findByRole("group", { name: "Tags" });
+    const tags = () => within(screen.getByRole("group", { name: "Tags" }));
+    await userEvent.click(tags().getByRole("button", { name: /^Road trip/ }));
+    expect(lastQuery()).toMatchObject({ tagIds: [ROAD.id], excludedTagIds: [] });
+
+    await userEvent.click(tags().getByRole("button", { name: /^Road trip/ }));
+    expect(lastQuery()).toMatchObject({ tagIds: [], excludedTagIds: [ROAD.id] });
+    const excluded = tags().getByRole("button", { name: /^Not\s*Road trip/ });
+    expect(excluded).toHaveAttribute("data-excluded", "true");
+    expect(excluded).toHaveAttribute("aria-pressed", "true");
+
+    await userEvent.click(excluded);
+    expect(lastQuery()).toMatchObject({ tagIds: [], excludedTagIds: [] });
+    expect(tags().getByRole("button", { name: /^Road trip/ })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   it("makes zero results useful and lets filters be cleared", async () => {
     renderApp("/listen-list");
     await userEvent.click(await screen.findByRole("button", { name: /^Pop/ }));

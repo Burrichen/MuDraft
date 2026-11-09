@@ -121,7 +121,7 @@ fn rich_profile(s: &AppState) {
             ratings::set_album(tx, &dlx.edition_id, Some(7))?;
             ratings::set_review(tx, &std_ed.edition_id, Some("Still great."))?;
             ratings::set_favourite(tx, &dlx.track_ids[1], true)?;
-            let session = selection::start_session(tx, SelectionMode::CompletelyRandom, None)?;
+            let session = selection::start_session(tx, 1, SelectionMode::CompletelyRandom, None)?;
             selection::record_attempt(tx, &session, &dlx.edition_id, SelectionSource::CompletelyRandom)?;
             tx.execute(
                 "INSERT INTO metadata_provenance (entity_type, entity_id, field, source, provider_value, is_override)
@@ -387,6 +387,27 @@ fn round_trip_is_exact_and_excludes_transient_data() {
     target
         .with_db(|db| db.write(|tx| tags::create(tx, "After restore", None)))
         .unwrap();
+}
+
+#[test]
+fn a_deleted_listen_asap_tag_stays_deleted_after_restore() {
+    let s = setup();
+    s.source
+        .with_db(|db| {
+            db.write(|tx| tags::delete(tx, crate::library::catalogue::LISTEN_ASAP_TAG_ID))
+        })
+        .unwrap();
+    let archive = s.root.join("no-asap.mudraft");
+    export_to(&s.source, &archive, true).unwrap();
+    let target = state(&s.root.join("no-asap-target"));
+    restore(&target, &archive).unwrap();
+    // The new database starts with the tag; the restore removes it again.
+    assert_eq!(count(&target, "tag WHERE builtin_key IS NOT NULL"), 0);
+    assert_same(
+        &dump(&target),
+        &dump(&s.source),
+        "the rest restores exactly",
+    );
 }
 
 #[test]
@@ -689,19 +710,26 @@ fn future_versions_are_rejected_without_changes() {
 fn older_schema_exports_are_upgraded_by_the_normal_migrations() {
     let s = setup();
     let older = s.root.join("older.mudraft");
-    // As written by a MuDraft at schema 9 (before catalogue credit parts and Listen List
-    // progress existed).
+    // As written by a MuDraft at schema 9 (before catalogue credit parts, Listen List
+    // progress, and Next Up slots existed).
     tamper(&s.archive, &older, true, |m, e| {
         m.schema_version = 9;
         m.tables.retain(|t| t.name != "listen_list_track");
         e.remove("data/listen_list_track.json");
-        edit_table(e, "catalogue_entry", |d| {
-            let i = d.columns.iter().position(|c| c == "credit_parts").unwrap();
-            d.columns.remove(i);
-            for r in &mut d.rows {
-                r.remove(i);
-            }
-        });
+        for (table, column) in [
+            ("catalogue_entry", "credit_parts"),
+            ("selection_session", "slot"),
+            ("album", "primary_type"),
+            ("album", "secondary_types"),
+        ] {
+            edit_table(e, table, |d| {
+                let i = d.columns.iter().position(|c| c == column).unwrap();
+                d.columns.remove(i);
+                for r in &mut d.rows {
+                    r.remove(i);
+                }
+            });
+        }
     });
     let target = state(&s.root.join("older-target"));
     let preview = restore(&target, &older).unwrap();

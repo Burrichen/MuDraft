@@ -24,9 +24,9 @@ pub enum AppError {
     Backup(String),
     #[error("Can't reach {0}. Check your connection; cached results are used when available.")]
     Offline(String),
-    #[error("{0} took too long to respond")]
+    #[error("No reply from {0} in time; try again")]
     Timeout(String),
-    #[error("{0} is limiting requests right now; try again shortly")]
+    #[error("Too many requests to {0} right now; try again shortly")]
     RateLimited(String),
     #[error("Request cancelled")]
     Cancelled,

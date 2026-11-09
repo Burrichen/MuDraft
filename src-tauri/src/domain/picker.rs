@@ -69,6 +69,9 @@ pub enum EmptyReason {
     ListenListEmpty,
     NoListenAsap,
     NoGuidedMatches,
+    /// Every matching album is already the pick of another Next Up slot. Reported by
+    /// `library::next_up`; `pick` itself never sees other slots.
+    AllInNextUp,
 }
 
 /// Uniform index source. Production uses the OS generator; tests script the sequence.

@@ -5,6 +5,7 @@ import { ArtworkConsent } from "../features/artwork/ArtworkConsent";
 import { Tooltip } from "../components/Tooltip";
 import { isPersistableRoute } from "../services/preferences";
 import { HealthStatus } from "./HealthStatus";
+import { UpdateProvider } from "./UpdateProvider";
 import { NAV_ITEMS } from "./navigation";
 import { usePreferences } from "./preferencesContext";
 import { useMediaQuery } from "./useMediaQuery";
@@ -47,79 +48,83 @@ export function Shell() {
   }, [pathname]);
 
   return (
-    <div className="shell" data-compact={compact}>
-      {/* Moves focus directly: with hash routing, following "#main-content" would navigate. */}
-      <a
-        className="skip-link"
-        href="#main-content"
-        onClick={(e) => {
-          e.preventDefault();
-          mainRef.current?.querySelector<HTMLElement>("h1")?.focus();
-        }}
-      >
-        Skip to content
-      </a>
-      <aside className="sidebar" aria-label="Sidebar">
-        <div className="sidebar-header">
-          <span className="brand" aria-hidden={compact}>
-            <span className="brand-mark">
-              <Icon name="music" size={18} />
+    <UpdateProvider>
+      <div className="shell" data-compact={compact}>
+        {/* Moves focus directly: with hash routing, following "#main-content" would navigate. */}
+        <a
+          className="skip-link"
+          href="#main-content"
+          onClick={(e) => {
+            e.preventDefault();
+            mainRef.current?.querySelector<HTMLElement>("h1")?.focus();
+          }}
+        >
+          Skip to content
+        </a>
+        <aside className="sidebar" aria-label="Sidebar">
+          <div className="sidebar-header">
+            <span className="brand" aria-hidden={compact}>
+              <span className="brand-mark">
+                <Icon name="music" size={18} />
+              </span>
+              <span className="brand-name">MuDraft</span>
             </span>
-            <span className="brand-name">MuDraft</span>
-          </span>
-          {!narrow && (
-            <Tooltip content={compact ? "Expand sidebar" : "Collapse sidebar"} placement="right">
+            {!narrow && (
+              <Tooltip content={compact ? "Expand sidebar" : "Collapse sidebar"} placement="right">
+                <button
+                  type="button"
+                  className="icon-button sidebar-toggle"
+                  aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
+                  aria-expanded={!compact}
+                  aria-controls="primary-nav"
+                  onClick={() => {
+                    update({ sidebarCollapsed: !prefs.sidebarCollapsed });
+                  }}
+                >
+                  <Icon name={compact ? "expand" : "collapse"} size={18} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
+          <nav id="primary-nav" aria-label="Main">
+            <ul className="nav-list">
+              {NAV_ITEMS.map((item) => (
+                <li key={item.path}>
+                  <Tooltip content={item.label} placement="right" enabled={compact}>
+                    <NavLink to={item.path} className="nav-link">
+                      <Icon name={item.icon} />
+                      <span className={compact ? "visually-hidden" : "nav-label"}>
+                        {item.label}
+                      </span>
+                    </NavLink>
+                  </Tooltip>
+                </li>
+              ))}
+            </ul>
+          </nav>
+          <HealthStatus compact={compact} />
+        </aside>
+        <main id="main-content" ref={mainRef} className="content" tabIndex={-1}>
+          {problem && (
+            <div className="banner" role="alert">
+              <Icon name="alert" size={18} />
+              <p className="banner-text">{problem}</p>
               <button
                 type="button"
-                className="icon-button sidebar-toggle"
-                aria-label={compact ? "Expand sidebar" : "Collapse sidebar"}
-                aria-expanded={!compact}
-                aria-controls="primary-nav"
-                onClick={() => {
-                  update({ sidebarCollapsed: !prefs.sidebarCollapsed });
-                }}
+                className="icon-button"
+                aria-label="Dismiss message"
+                onClick={dismissProblem}
               >
-                <Icon name={compact ? "expand" : "collapse"} size={18} />
+                <Icon name="close" size={16} />
               </button>
-            </Tooltip>
+            </div>
           )}
-        </div>
-        <nav id="primary-nav" aria-label="Main">
-          <ul className="nav-list">
-            {NAV_ITEMS.map((item) => (
-              <li key={item.path}>
-                <Tooltip content={item.label} placement="right" enabled={compact}>
-                  <NavLink to={item.path} className="nav-link">
-                    <Icon name={item.icon} />
-                    <span className={compact ? "visually-hidden" : "nav-label"}>{item.label}</span>
-                  </NavLink>
-                </Tooltip>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <HealthStatus compact={compact} />
-      </aside>
-      <main id="main-content" ref={mainRef} className="content" tabIndex={-1}>
-        {problem && (
-          <div className="banner" role="alert">
-            <Icon name="alert" size={18} />
-            <p className="banner-text">{problem}</p>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="Dismiss message"
-              onClick={dismissProblem}
-            >
-              <Icon name="close" size={16} />
-            </button>
+          <div className="content-inner">
+            <Outlet />
           </div>
-        )}
-        <div className="content-inner">
-          <Outlet />
-        </div>
-        <ArtworkConsent />
-      </main>
-    </div>
+          <ArtworkConsent />
+        </main>
+      </div>
+    </UpdateProvider>
   );
 }

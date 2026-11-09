@@ -27,7 +27,6 @@ export interface ListenListStats {
   genres: Count[];
   albumsWithoutGenre: number;
   tags: Count[];
-  listenAsap: number;
   recentlyAdded: Waiting[];
   oldestWaiting: Waiting[];
   waiting: { meanDays: number; medianDays: number; longestDays: number } | null;
@@ -38,8 +37,19 @@ export interface GroupScore {
   key: string;
   label: string;
   meanStars: number;
-  /** Sample size, shown but never used to penalize. */
+  /** Sample size, shown but never used to penalize (albums with rated tracks, by tracks). */
   albums: number;
+  /** Rated tracks behind `meanStars` when ranking by tracks; null for album rankings. */
+  tracks: number | null;
+}
+
+/** "Top rated" scored by individual track ratings instead of album scores. */
+export interface TrackRankings {
+  ratedTracks: number;
+  bestYear: Best;
+  bestDecade: Best;
+  bestGenre: Best;
+  bestArtist: Best;
 }
 
 export interface Best {
@@ -76,6 +86,7 @@ export interface CollectionStats {
   bestDecade: Best;
   bestGenre: Best;
   bestArtist: Best;
+  trackRankings: TrackRankings;
   favouriteTracks: {
     trackId: string;
     title: string;

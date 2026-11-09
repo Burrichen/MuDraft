@@ -104,10 +104,11 @@ function catalogue(over: Partial<ArtistCatalogue> = {}): ArtistCatalogue {
       manualEntries: 0,
       tracklistsKnown: 2,
       tracklistsNeeded: 3,
-      note: "Only part of the MusicBrainz catalogue has been fetched (100 of 150).",
+      note: "Only part of the online catalogue has been fetched (100 of 150).",
     },
     scope: { primaryTypes: ["Album"], secondaryTypes: [] },
-    denominator: "Counting MusicBrainz release groups of type Album with no secondary type.",
+    denominator:
+      "Counting albums of type Album with no secondary type from the artist's official online catalogue.",
     representativeRule: "The earliest-dated official release that has a tracklist.",
     entries: [
       entry({
@@ -172,7 +173,7 @@ describe("Artist page", () => {
   it("shows identity, both progress bars, provisional coverage, and the ranking", async () => {
     renderApp(`/artists/${ARTIST}`);
     expect(await screen.findByRole("heading", { level: 1, name: "Björk" })).toBeInTheDocument();
-    expect(screen.getByText(/Icelandic singer · MusicBrainz 87c5/)).toBeInTheDocument();
+    expect(screen.getByText(/Icelandic singer · Linked to online metadata/)).toBeInTheDocument();
     expect(screen.getByText("Provisional")).toBeInTheDocument();
     expect(screen.getByRole("progressbar", { name: "Albums listened in full" })).toHaveAttribute(
       "aria-valuetext",

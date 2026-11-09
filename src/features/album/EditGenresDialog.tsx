@@ -93,8 +93,7 @@ export function EditGenresDialog({
       <div className="match">
         <p className="match-note">
           Choose up to {MAX_GENRES}, most relevant first. Your choice is kept when the album is
-          refreshed from MusicBrainz; use <strong>Reset to default</strong> on the album page to
-          undo it.
+          refreshed; use <strong>Reset to default</strong> on the album page to undo it.
         </p>
         {vocabulary ? (
           <div className="filter-bubbles" role="group" aria-label="Genres">

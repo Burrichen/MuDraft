@@ -275,7 +275,7 @@ export function conflictField(c: SyncConflict): string {
   const first = c.columns.find((col) => !col.endsWith("_precision")) ?? c.columns[0] ?? "";
   if (c.table === "metadata_provenance") return "Metadata source";
   if (c.table === "artwork") return "Artwork";
-  if (first.startsWith("musicbrainz_")) return "MusicBrainz ID";
+  if (first.startsWith("musicbrainz_")) return "Online metadata link";
   return FIELD_LABELS[first] ?? first.replace(/_/g, " ");
 }
 

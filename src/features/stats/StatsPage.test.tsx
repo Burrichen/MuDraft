@@ -29,12 +29,13 @@ const ALPHA = "0190f5c3-0000-7000-8000-0000000000a1";
 const BETA = "0190f5c3-0000-7000-8000-0000000000a2";
 
 const noBest: Best = { top: [], minAlbums: 3, groups: [], unplacedAlbums: 0 };
-const group = (key: string, label: string, meanStars: number, albums: number) => ({
-  key,
-  label,
-  meanStars,
-  albums,
-});
+const group = (
+  key: string,
+  label: string,
+  meanStars: number,
+  albums: number,
+  tracks: number | null = null,
+) => ({ key, label, meanStars, albums, tracks });
 
 function stats(over: Partial<Stats> = {}): Stats {
   return {
@@ -52,7 +53,6 @@ function stats(over: Partial<Stats> = {}): Stats {
       genres: [{ key: "Rock", label: "Rock", count: 2 }],
       albumsWithoutGenre: 1,
       tags: [{ key: "00000000-0000-7000-8000-000000000001", label: "Listen ASAP", count: 1 }],
-      listenAsap: 1,
       recentlyAdded: [],
       oldestWaiting: [
         { albumId: "x", editionId: "e", title: "Old One", addedAt: "2026-09-01", waitingDays: 31 },
@@ -106,6 +106,29 @@ function stats(over: Partial<Stats> = {}): Stats {
         groups: [group(ALPHA, "Alpha", 0, 3)],
         unplacedAlbums: 0,
       },
+      // By tracks the picture differs: Jazz now has tracks from three albums.
+      trackRankings: {
+        ratedTracks: 9,
+        bestYear: noBest,
+        bestDecade: {
+          top: [group("1990", "1990s", 2.5, 3, 6)],
+          minAlbums: 3,
+          groups: [group("1990", "1990s", 2.5, 3, 6)],
+          unplacedAlbums: 3,
+        },
+        bestGenre: {
+          top: [group("Jazz", "Jazz", 4.5, 3, 4), group("Rock", "Rock", 1, 3, 5)],
+          minAlbums: 3,
+          groups: [group("Jazz", "Jazz", 4.5, 3, 4), group("Rock", "Rock", 1, 3, 5)],
+          unplacedAlbums: 0,
+        },
+        bestArtist: {
+          top: [group(ALPHA, "Alpha", 2, 3, 7)],
+          minAlbums: 3,
+          groups: [group(ALPHA, "Alpha", 2, 3, 7)],
+          unplacedAlbums: 0,
+        },
+      },
       favouriteTracks: [],
       runtime: {
         sessions: 3,
@@ -157,10 +180,7 @@ describe("Stats page", () => {
       "href",
       `/listen-list?artist=${ALPHA}`,
     );
-    expect(within(listen).getByRole("link", { name: /Tagged Listen ASAP/ })).toHaveAttribute(
-      "href",
-      "/listen-list?tag=00000000-0000-7000-8000-000000000001",
-    );
+    expect(within(listen).queryByText(/Tagged Listen ASAP/)).not.toBeInTheDocument();
     const collection = screen.getByRole("region", { name: "Collection" });
     const bestGenre = within(collection).getByRole("region", { name: "Best genre" });
     expect(within(bestGenre).getByRole("link", { name: "Rock" })).toHaveAttribute(
@@ -208,12 +228,12 @@ describe("Stats page", () => {
     const cards = within(overview)
       .getAllByRole("listitem")
       .map((c) => c.textContent);
-    expect(cards.slice(0, 3)).toEqual([
+    expect(cards.slice(0, 2)).toEqual([
       "2Unique albums in Collection",
       // Three dated listens plus one undated.
       "4Total listens",
-      "2Albums listened to",
     ]);
+    expect(overview).not.toHaveTextContent("Albums listened to");
     expect(
       within(overview).getByRole("link", { name: /Unique albums in Collection/ }),
     ).toHaveAttribute("href", "/collection");
@@ -253,6 +273,47 @@ describe("Stats page", () => {
     expect(screen.getByRole("region", { name: "Best release year" })).toHaveTextContent(
       "Nothing has 3 rated albums yet.",
     );
+  });
+
+  it("switches Top rated between album and track ratings", async () => {
+    const user = userEvent.setup();
+    renderApp("/stats");
+    const rankBy = await screen.findByRole("group", { name: "Rank by" });
+    const albums = within(rankBy).getByRole("button", { name: "Albums" });
+    const tracks = within(rankBy).getByRole("button", { name: "Tracks" });
+    expect(albums).toHaveAttribute("aria-pressed", "true");
+    const bestGenre = () => screen.getByRole("region", { name: "Best genre" });
+    expect(
+      within(bestGenre())
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual(["Rock"]);
+    expect(bestGenre()).toHaveTextContent("from 3 rated albums");
+
+    await user.click(tracks);
+    expect(tracks).toHaveAttribute("aria-pressed", "true");
+    expect(albums).toHaveAttribute("aria-pressed", "false");
+    expect(
+      within(bestGenre())
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual(["Jazz", "Rock"]);
+    expect(bestGenre()).toHaveTextContent("4.5 of 5 stars from 4 rated tracks on 3 albums");
+    expect(screen.getByRole("region", { name: "Best release year" })).toHaveTextContent(
+      "Nothing has rated tracks from 3 albums yet.",
+    );
+    expect(screen.getByText(/averaged track by track/)).toBeInTheDocument();
+    // The tables below follow the toggle too.
+    const genres = screen.getByRole("figure", { name: "Highest-rated genres" });
+    expect(within(genres).getByText("Jazz")).toBeInTheDocument();
+    expect(within(genres).getByText(/4\.5 ★ · 4 tracks/)).toBeInTheDocument();
+
+    await user.click(albums);
+    expect(
+      within(bestGenre())
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual(["Rock"]);
   });
 
   it("drops undated notes, the listening-kind chart, and doubled decade suffixes", async () => {

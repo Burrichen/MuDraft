@@ -194,16 +194,11 @@ pub fn update(
 }
 
 /// Delete a tag and its assignments (albums are untouched). Returns how many albums
-/// lost the tag.
+/// lost the tag. The built-in Listen ASAP tag can be deleted too; Weighted Random then has
+/// nothing to pick from (it never falls back to other albums).
 pub fn delete(tx: &Transaction<'_>, id: &str) -> AppResult<u32> {
     let id = parse_uuid("tag", id)?;
     let tag = get(tx, &id)?;
-    if tag.builtin {
-        return Err(AppError::validation(
-            "tag",
-            "built-in tags can’t be deleted",
-        ));
-    }
     tx.execute("DELETE FROM tag WHERE id = ?1", params![id])?;
     Ok(tag.album_count)
 }

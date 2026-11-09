@@ -51,8 +51,8 @@ export function MetadataSettings() {
       </h2>
       <p className="setting-hint">
         Album details come from MusicBrainz. To update an album, open it and choose{" "}
-        <strong>Refresh from MusicBrainz</strong>; fields you edited (including genres) stay as you
-        set them. Artist catalogues are fetched and refreshed from each artist’s page.
+        <strong>Refresh Details</strong>; fields you edited (including genres) stay as you set them.
+        Artist catalogues are fetched and refreshed from each artist’s page.
       </p>
       <div className="setting-row">
         <div className="setting-text">

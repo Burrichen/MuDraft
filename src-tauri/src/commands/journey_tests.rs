@@ -170,14 +170,14 @@ async fn full_journey_from_csv_to_restore() {
     .unwrap();
     let mut rng = next_up::OsRandom;
     let pick = state
-        .with_db(|db| db.write(|tx| next_up::roll(tx, None, guided.clone(), YEAR, &mut rng)))
+        .with_db(|db| db.write(|tx| next_up::roll(tx, None, 1, guided.clone(), YEAR, &mut rng)))
         .unwrap();
     let RollOutcome::Picked { shown, .. } = pick else {
         panic!("expected a pick, got {pick:?}")
     };
     assert_eq!(shown.album_id, homogenic.album_id);
     let reroll = state
-        .with_db(|db| db.write(|tx| next_up::roll(tx, None, guided.clone(), YEAR, &mut rng)))
+        .with_db(|db| db.write(|tx| next_up::roll(tx, None, 1, guided.clone(), YEAR, &mut rng)))
         .unwrap();
     assert_eq!(reroll, RollOutcome::Exhausted { pool_size: 1 });
 
@@ -232,7 +232,7 @@ async fn full_journey_from_csv_to_restore() {
     // ---- No Listen ASAP candidates left on the list: Weighted Random says so, no fallback.
     let weighted = state
         .with_db(|db| {
-            db.write(|tx| next_up::roll(tx, None, Method::WeightedRandom, YEAR, &mut rng))
+            db.write(|tx| next_up::roll(tx, None, 1, Method::WeightedRandom, YEAR, &mut rng))
         })
         .unwrap();
     assert_eq!(

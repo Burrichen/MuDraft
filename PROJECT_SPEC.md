@@ -8,7 +8,8 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 - No hosted backend, accounts, telemetry, subscription, or runtime Node server. Optional GitHub sync (§7) uses the user's own GitHub account and private repository.
 - Sleek dark UI inspired by FDraft: collapsible sidebar, artwork cards, restrained motion.
 - Colour (supersedes the earlier navy/blue base): a neutral charcoal/grey app, after VS Code's default dark theme and FDraft, with blue accents only. Backgrounds, sidebar, cards, dialogs, inputs, and unselected bubbles stay grey (`#1E1E1E`, `#252526`, `#2D2D30`; borders `#3C3C3C`; text `#D4D4D4`/`#A6A6A6`). Blue (`#3794FF` family) is reserved for primary actions, links, focus rings, selected indicators, and progress fills; active nav/filter states may use restrained blue. No navy surfaces or broad blue gradients. Artwork, user tag colours, and success/warning/error colours are kept; Listen ASAP defaults to mustard yellow. Change colours only through shared theme tokens (`src/theme/tokens.css`), keeping WCAG AA contrast. No theme selector.
-- Navigation: Listen List, Next Up, Collection, Stats, Settings; nested Album and Artist pages.
+- Navigation: Listen List, Next Up, Collection, Stats, Settings; nested Album and Artist pages. The sidebar footer shows the app version and storage status; Settings shows the version.
+- Listen List and Collection tag bubbles cycle: only albums with the tag → albums without it (red, ✕) → off. Album pages have no About/description section.
 
 ## 2. Data
 
@@ -19,17 +20,18 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 ## 3. Acquisition
 
 - Custom CSV is the only bulk-import format. Manual creation and metadata search also work.
-- MusicBrainz supplies metadata; Cover Art Archive supplies optional cached artwork.
+- MusicBrainz supplies metadata; Cover Art Archive supplies optional cached artwork. MusicBrainz is credited in Settings (Data sources, Metadata) only; elsewhere the UI says "online".
+- Interviews, audiobooks, and audio dramas are out of scope: never offered in search, imported, or kept in artist catalogues.
 - Match review and editable metadata are required.
 - Normalize source genres into 2–3 useful broad genres where supported. Never invent missing facts.
 
 ## 4. Next Up
 
-- Exactly one current album.
+- Up to five Next Up slots at once. Each has its own method, choices, reroll pool, and current album; an album is the pick of at most one slot. Manual picks fill the lowest free slot, or ask which slot to replace when all five are in use.
 - **Completely Random:** uniform selection from the Listen List.
-- **Weighted Random:** uniform selection ONLY from albums with the built-in `Listen ASAP` tag. Do not change this to probability weighting or silently fall back.
+- **Weighted Random:** uniform selection ONLY from albums with the built-in `Listen ASAP` tag. Do not change this to probability weighting or silently fall back. Every new library starts with `Listen ASAP`; the user may delete it (name fixed, colour editable), and it stays deleted, which makes Weighted Random unavailable.
 - **Guided Recommendation:** one scrollable page with Decade, Genre, Tag. OR within a category, AND between categories. `Agnostic` is the default and is exclusive within its category. Offer represented decades, plus a current-year option when represented.
-- Rerolls never repeat a result until that session's pool is exhausted.
+- Rerolls never repeat a result until that slot's session pool is exhausted.
 
 ## 5. Listening and ratings
 
@@ -43,21 +45,23 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 
 ## 6. Artists and stats
 
-- Artist pages: ranked discography; album and track completion bars with counts and percentages. Explain catalogue coverage and how editions are counted.
+- Artist pages: ranked discography; album and track completion bars with counts and percentages. Explain catalogue coverage and how editions are counted. Progress never counts library albums that are singles or live recordings (a single's songs still count through the albums they appear on); albums of unknown type count.
 - Stats: equally prominent Listen List and Collection sections, including best-rated release year, genre, and artists.
-- Stats "Top rated" rankings list the top 3 groups and consider only groups with at least 3 rated albums. Elsewhere, NO minimum sample sizes, Bayesian adjustments, or suppressed small-sample results; show counts without penalizing them. "Various Artists" is not counted as an artist.
+- Stats "Top rated" rankings list the top 3 groups and consider only groups with at least 3 rated albums. A Rank by toggle switches them (and the rating-by-decade and genre tables) between album scores and individual track ratings; by tracks, each rated recording counts once per album and groups need rated tracks from at least 3 albums. Elsewhere, NO minimum sample sizes, Bayesian adjustments, or suppressed small-sample results; show counts without penalizing them. "Various Artists" is not counted as an artist.
 
 ## 7. Portability and release
 
 - Profile export/import preserves all meaningful user data, relationships, overrides, settings, and optionally artwork.
 - Core use works offline.
 - Ship Windows x64 NSIS setup `.exe` and universal macOS `.dmg`.
+- Signed in-app updates: at startup (and from Settings) check the latest GitHub release; when newer, show its short release notes and install only when the user confirms. Updates are verified against the bundled public key; failed checks stay silent.
 - Native platform CI builds, honest signing status, and recoverable storage are required.
 - Optional private GitHub sync (one person, several computers), manual only, from Settings → GitHub Sync (no background sync, no new sidebar page):
   - A separate, user-created private repository (suggested `MuDraft-Sync`), written only under `sync/` with a versioned format marker. Only an explicit, confirmed initialise writes to an empty repository; Sync treats uninitialised, unrelated, public, or newer-format repositories as setup errors, never overwriting them.
   - One fine-grained token per computer (that repository only, Contents read/write), kept in the OS secure store and used only from Rust.
   - A versioned, deterministic portable state (not a database copy); custom artwork as content-addressed assets; caches, credentials, paths, and window state excluded.
   - Deterministic three-way merge against the last common state; conflicting edits are returned for the user to resolve, never settled by clocks.
+  - Discographies sync (fetched albums, tracklists, manual entries, exclusions, scope). Fetched online data is not a user edit: it merges by newest fetch and never needs resolving; exclusions, scope, and manual entries follow the rule above.
   - Backup before local changes, transactional apply, fast-forward-only commits; never force-push or rewrite history.
   - First sync previews both libraries and needs an explicit Upload, Download, or Merge choice; an existing library is never replaced silently.
   - Private storage is not end-to-end encryption.

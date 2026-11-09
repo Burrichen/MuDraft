@@ -1,32 +1,63 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Link } from "react-router";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
-import { chooseNextUp, nextUpState } from "../../services/nextUp";
+import { chooseNextUp, nextUpState, type NextUpSlot } from "../../services/nextUp";
+import { METHOD_LABEL } from "./criteria";
+import "./nextUp.css";
+
+interface Option {
+  slot: number;
+  title: string;
+  detail: string;
+}
 
 interface Pending {
   editionId: string;
   title: string;
-  replacing: string;
   requestId: string;
+  max: number;
+  options: Option[];
+}
+
+function option(s: NextUpSlot): Option {
+  if (s.current)
+    return { slot: s.slot, title: s.current.item.title, detail: s.current.item.credit };
+  return {
+    slot: s.slot,
+    title: "Nothing picked yet",
+    detail: s.session ? `Picks with ${METHOD_LABEL[s.session.method.mode]}` : "",
+  };
 }
 
 /**
- * Manual "Make Next Up" for list and album views. Replacing an existing pick asks first;
- * the replaced pick counts as skipped. Render `element` where the status should appear.
+ * Manual "Make Next Up" for list and album views. The album is added to a free Next Up
+ * slot; when every slot is in use, it asks which one to replace (that pick counts as
+ * skipped and stays on the Listen List). Render `element` where the status should appear.
  */
 export function useMakeNextUp() {
   const [pending, setPending] = useState<Pending | null>(null);
+  const [replace, setReplace] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const name = useId();
 
-  const choose = async (editionId: string, title: string, requestId: string) => {
+  const choose = async (
+    editionId: string,
+    title: string,
+    requestId: string,
+    slot?: { number: number; replacing: string },
+  ) => {
     setBusy(true);
     try {
-      await chooseNextUp(requestId, editionId);
+      await chooseNextUp(requestId, editionId, slot?.number);
       setPending(null);
-      setStatus(`“${title}” is now your Next Up.`);
+      setStatus(
+        slot
+          ? `“${title}” replaced “${slot.replacing}” in your Next Up.`
+          : `“${title}” is now in your Next Up.`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -38,15 +69,17 @@ export function useMakeNextUp() {
     setStatus(null);
     setError(null);
     try {
-      const { current } = await nextUpState();
-      if (current?.editionId === editionId) {
-        setStatus(`“${title}” is already your Next Up.`);
-      } else if (current) {
+      const state = await nextUpState();
+      if (state.slots.some((s) => s.current?.editionId === editionId)) {
+        setStatus(`“${title}” is already in your Next Up.`);
+      } else if (state.nextFreeSlot === null) {
+        setReplace(null);
         setPending({
           editionId,
           title,
-          replacing: current.item.title,
           requestId: crypto.randomUUID(),
+          max: state.maxSlots,
+          options: state.slots.map(option),
         });
       } else {
         await choose(editionId, title, crypto.randomUUID());
@@ -56,6 +89,7 @@ export function useMakeNextUp() {
     }
   };
 
+  const chosen = pending?.options.find((o) => o.slot === replace);
   const element = (
     <>
       {status && (
@@ -70,7 +104,7 @@ export function useMakeNextUp() {
       )}
       <Dialog
         open={pending !== null}
-        title="Replace your Next Up?"
+        title="Your Next Up is full"
         onClose={() => {
           setPending(null);
         }}
@@ -81,22 +115,53 @@ export function useMakeNextUp() {
                 setPending(null);
               }}
             >
-              Keep current pick
+              Cancel
             </Button>
             <Button
               variant="primary"
-              disabledReason={busy ? "Saving…" : undefined}
+              disabledReason={
+                busy ? "Saving…" : chosen ? undefined : "Choose which pick to replace first."
+              }
               onClick={() => {
-                if (pending) void choose(pending.editionId, pending.title, pending.requestId);
+                if (pending && chosen)
+                  void choose(pending.editionId, pending.title, pending.requestId, {
+                    number: chosen.slot,
+                    replacing: chosen.title,
+                  });
               }}
             >
-              Make Next Up
+              Replace
             </Button>
           </>
         }
       >
-        “{pending?.replacing}” is your current Next Up. Make “{pending?.title}” your Next Up
-        instead? “{pending?.replacing}” stays on your Listen List.
+        <p>
+          All {pending?.max} Next Up slots are in use. Choose one to replace with “{pending?.title}
+          ”. The album you replace stays on your Listen List.
+        </p>
+        <fieldset className="next-up-replace">
+          <legend className="visually-hidden">Replace</legend>
+          {pending?.options.map((o) => (
+            <label
+              key={o.slot}
+              className="next-up-replace-option"
+              data-checked={replace === o.slot}
+            >
+              <input
+                type="radio"
+                name={name}
+                checked={replace === o.slot}
+                onChange={() => {
+                  setReplace(o.slot);
+                }}
+              />
+              <span className="next-up-replace-body">
+                <span className="next-up-replace-title">{o.title}</span>
+                {o.detail && <span className="setting-hint">{o.detail}</span>}
+              </span>
+            </label>
+          ))}
+        </fieldset>
       </Dialog>
     </>
   );

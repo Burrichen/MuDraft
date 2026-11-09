@@ -141,6 +141,22 @@ impl ProviderDate {
     }
 }
 
+/// Release-group secondary types MuDraft never offers, stores, or counts: spoken-word
+/// releases that aren't music albums.
+pub const UNSUPPORTED_SECONDARY_TYPES: &[&str] = &["Interview", "Audiobook", "Audio drama"];
+
+pub const UNSUPPORTED_MESSAGE: &str =
+    "interviews, audiobooks, and audio dramas aren’t supported in MuDraft";
+
+/// Whether a release group with these secondary types is out of MuDraft's scope.
+pub fn unsupported_release_type(secondary_types: &[String]) -> bool {
+    secondary_types.iter().any(|s| {
+        UNSUPPORTED_SECONDARY_TYPES
+            .iter()
+            .any(|u| u.eq_ignore_ascii_case(s.trim()))
+    })
+}
+
 /// A canonical album (MusicBrainz release group) offered for review.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -207,6 +223,13 @@ pub struct ReleaseGroupDetail {
     /// Community-written MusicBrainz annotation, used as a sourced description.
     #[serde(default)]
     pub annotation: Option<String>,
+    /// Release-group type (Album, Single, EP…); `None` when unknown.
+    #[serde(default)]
+    pub primary_type: Option<String>,
+    /// Secondary types (Live, Compilation…); `None` when the provider didn't say (e.g.
+    /// details saved before types were recorded).
+    #[serde(default)]
+    pub secondary_types: Option<Vec<String>>,
     pub original_date: ProviderDate,
     pub artist_credit: Vec<CreditPart>,
     pub genres: Vec<SourceTag>,

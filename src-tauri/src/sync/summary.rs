@@ -242,7 +242,7 @@ pub fn describe(schema: &Schema, conflict: &Conflict, states: [&State; 2]) -> St
         "collection_entry" => format!("{} in the Collection", edition(&first)),
         "album_artist_credit" => format!("Artists of {}", album(&first)),
         "album_genre" => format!("Genres of {}", album(&first)),
-        "album_source_tag" => format!("MusicBrainz genres of {}", album(&first)),
+        "album_source_tag" => format!("Source genres of {}", album(&first)),
         "track_artist_credit" => format!("Artists of {}", track(&first)),
         "metadata_provenance" => {
             let entity = field_of("entity_type").and_then(|v| v.as_str().map(str::to_owned));
@@ -269,12 +269,17 @@ pub fn describe(schema: &Schema, conflict: &Conflict, states: [&State; 2]) -> St
             ),
         },
         "setting" => format!("Preference “{}”", first.as_str().unwrap_or_default()),
-        "current_selection" => "Next Up’s current album".into(),
+        "current_selection" => format!("Next Up pick (slot {first})"),
         "selection_session" | "selection_attempt" => "Next Up history".into(),
         "catalogue_entry" => format!(
             "Catalogue entry “{}”",
             text(look.field("catalogue_entry", &first, "title")).unwrap_or_default()
         ),
+        "artist_catalogue" => format!(
+            "Discography settings for {}",
+            text(look.field("artist", &first, "name")).unwrap_or_else(|| "an artist".into())
+        ),
+        "catalogue_reference" | "catalogue_track" => "A discography tracklist".into(),
         other => other.replace('_', " "),
     }
 }

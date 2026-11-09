@@ -24,7 +24,8 @@ use crate::domain::ids::new_id;
 use crate::error::{AppError, AppResult};
 use crate::metadata::genres;
 use crate::metadata::{
-    CreditPart, ReleaseDetail, ReleaseGroupDetail, SourceTag, TrackDetail, credit_text,
+    CreditPart, ReleaseDetail, ReleaseGroupDetail, SourceTag, TrackDetail, UNSUPPORTED_MESSAGE,
+    credit_text, unsupported_release_type,
 };
 
 const SOURCE: &str = "musicbrainz";
@@ -62,6 +63,13 @@ pub fn import_release(tx: &Transaction<'_>, req: &ImportRequest<'_>) -> AppResul
             "edition",
             "the selected release does not belong to the selected album",
         ));
+    }
+    if rg
+        .secondary_types
+        .as_deref()
+        .is_some_and(unsupported_release_type)
+    {
+        return Err(AppError::validation("album", UNSUPPORTED_MESSAGE));
     }
     let mut locked = Vec::new();
 
@@ -257,6 +265,15 @@ fn upsert_album(
             (id, true)
         }
     };
+    // Release-group type: never user-edited, so every fetch that knows it records it.
+    if let Some(secondary) = &rg.secondary_types {
+        let secondary = serde_json::to_string(secondary)
+            .map_err(|e| AppError::Internal(format!("cannot encode release types: {e}")))?;
+        tx.execute(
+            "UPDATE album SET primary_type = ?2, secondary_types = ?3 WHERE id = ?1",
+            params![id, rg.primary_type, secondary],
+        )?;
+    }
     provenance(
         tx,
         "album",

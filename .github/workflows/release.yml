@@ -3,6 +3,9 @@ name: Release
 # Builds the next MuDraft release for BOTH platforms from ONE commit:
 #   - MuDraft_<version>_windows_x64_setup.exe  (NSIS, per-user, offline WebView2)
 #   - MuDraft_<version>_macos_universal.dmg    (MuDraft.app for arm64 + x86_64)
+#   - latest.json + MuDraft_<version>_macos_universal.app.tar.gz: signed in-app updates
+#     (the Windows update is the setup .exe itself). Needs the TAURI_SIGNING_PRIVATE_KEY
+#     secret; see docs/RELEASE.md.
 # Order: version check → full test gate on Windows and macOS → build each installer →
 # verify installers on real runners (Windows x64, Apple Silicon, Intel Mac) → one DRAFT
 # GitHub release with both files and SHA256SUMS.txt.
@@ -222,11 +225,21 @@ jobs:
         env:
           SIGNED: ${{ steps.signing.outputs.signed }}
           VERSION: ${{ needs.meta.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          $cli = @('tauri', 'build', '--ci', '--bundles', 'nsis')
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'TAURI_SIGNING_PRIVATE_KEY is not set: in-app updates need signed updater files (docs/RELEASE.md).' }
+          $updater = Join-Path $env:RUNNER_TEMP 'updater.json'
+          '{"bundle": {"createUpdaterArtifacts": true}}' | Set-Content $updater
+          $cli = @('tauri', 'build', '--ci', '--bundles', 'nsis', '--config', $updater)
           if ($env:SIGNED -eq 'true') { $cli += @('--config', (Join-Path $env:RUNNER_TEMP 'signing.json')) }
           npx @cli
           if ($LASTEXITCODE -ne 0) { throw 'release build failed' }
+          # The updater installs this same setup .exe; its signature goes into latest.json.
+          $sigFile = "src-tauri/target/release/bundle/nsis/MuDraft_$($env:VERSION)_x64-setup.exe.sig"
+          if (-not (Test-Path $sigFile)) { throw 'The updater signature was not created' }
+          New-Item -ItemType Directory -Force updater | Out-Null
+          Move-Item $sigFile "updater/MuDraft_$($env:VERSION)_windows_x64_setup.exe.sig"
           New-Item -ItemType Directory -Force release | Out-Null
           $out = "release/MuDraft_$($env:VERSION)_windows_x64_setup.exe"
           Move-Item "src-tauri/target/release/bundle/nsis/MuDraft_$($env:VERSION)_x64-setup.exe" $out
@@ -252,6 +265,12 @@ jobs:
         with:
           name: MuDraft-windows-x64
           path: release/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: MuDraft-windows-x64-updater
+          path: updater/
           if-no-files-found: error
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -331,8 +350,15 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          args=(tauri build --ci --target universal-apple-darwin --bundles app,dmg)
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set: in-app updates need signed updater files (docs/RELEASE.md)."
+            exit 1
+          fi
+          echo '{"bundle": {"createUpdaterArtifacts": true}}' > "$RUNNER_TEMP/updater.json"
+          args=(tauri build --ci --target universal-apple-darwin --bundles app,dmg --config "$RUNNER_TEMP/updater.json")
           if [ "$SIGNED" = true ]; then
             args+=(--config "$RUNNER_TEMP/signing.json")
           else
@@ -344,11 +370,23 @@ jobs:
           cp "src-tauri/target/universal-apple-darwin/release/bundle/dmg/MuDraft_${VERSION}_universal.dmg" \
             "release/MuDraft_${VERSION}_macos_universal.dmg"
           ls -l release
+          # The in-app update: the same universal MuDraft.app, compressed, with its signature.
+          app=src-tauri/target/universal-apple-darwin/release/bundle/macos
+          mkdir -p updater
+          cp "$app/MuDraft.app.tar.gz" "updater/MuDraft_${VERSION}_macos_universal.app.tar.gz"
+          cp "$app/MuDraft.app.tar.gz.sig" "updater/MuDraft_${VERSION}_macos_universal.app.tar.gz.sig"
+          ls -l updater
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: MuDraft-macos-universal
           path: release/
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: MuDraft-macos-universal-updater
+          path: updater/
           if-no-files-found: error
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -423,6 +461,40 @@ jobs:
           name: MuDraft-macos-universal
           path: release
 
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: MuDraft-windows-x64-updater
+          path: updater
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: MuDraft-macos-universal-updater
+          path: updater
+
+      # Installed copies fetch releases/latest/download/latest.json, so updates appear once
+      # this draft is published as the latest release. The short patch notes are the
+      # version's release notes.
+      - name: Write the updater manifest (latest.json)
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          base="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/v${VERSION}"
+          win="MuDraft_${VERSION}_windows_x64_setup.exe"
+          mac="MuDraft_${VERSION}_macos_universal.app.tar.gz"
+          test -s "updater/${win}.sig"
+          test -s "updater/${mac}"
+          test -s "updater/${mac}.sig"
+          jq -n --arg version "$VERSION" --rawfile notes "docs/release-notes/v${VERSION}.md" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --rawfile winsig "updater/${win}.sig" --arg winurl "${base}/${win}" \
+            --rawfile macsig "updater/${mac}.sig" --arg macurl "${base}/${mac}" \
+            '{version: $version, notes: ($notes | rtrimstr("\n")), pub_date: $date, platforms: {
+                "windows-x86_64": {signature: ($winsig | rtrimstr("\n")), url: $winurl},
+                "darwin-aarch64": {signature: ($macsig | rtrimstr("\n")), url: $macurl},
+                "darwin-x86_64": {signature: ($macsig | rtrimstr("\n")), url: $macurl}}}' \
+            > updater/latest.json
+          jq '.platforms | map_values(.url)' updater/latest.json
+
       - name: Check assets and write checksums
         env:
           VERSION: ${{ needs.meta.outputs.version }}
@@ -492,5 +564,8 @@ jobs:
             gh release create "$tag" release/* --repo "$GITHUB_REPOSITORY" --draft \
               --target "$GITHUB_SHA" --title "$title" --notes-file notes.md
           fi
+          # In-app update files (the Windows update reuses the setup .exe above).
+          gh release upload "$tag" updater/latest.json "updater/MuDraft_${VERSION}_macos_universal.app.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --clobber
           gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url,isDraft,assets \
             --jq '"Draft: \(.isDraft)  \(.url)", (.assets[] | "  \(.name)  \(.size) bytes")'

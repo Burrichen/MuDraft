@@ -173,7 +173,7 @@ fn row_errors_are_reported_and_excluded_but_do_not_block_the_rest() {
     assert_eq!(errors.len(), 4);
     assert!(errors[0].1.contains("album is required"));
     assert!(errors[1].1.contains("“97” isn’t a year"));
-    assert!(errors[2].1.contains("isn’t a MusicBrainz ID"));
+    assert!(errors[2].1.contains("isn’t a valid release ID"));
     assert!(errors[3].1.contains("unquoted comma"));
     // An error row can only be skipped.
     let err = db
@@ -301,7 +301,7 @@ fn exact_ids_already_in_the_library_resolve_predictably_offline() {
     assert_eq!(all[2].readiness, Readiness::NeedsEdition);
     let err = commit_all(&mut db, &s, &[]).unwrap_err();
     assert!(
-        err.to_string().contains("rows 4 need a MusicBrainz lookup"),
+        err.to_string().contains("rows 4 need an online lookup"),
         "{err}"
     );
     assert_eq!(count(&db, "listen_list_entry"), 0);

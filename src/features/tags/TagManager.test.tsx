@@ -85,13 +85,13 @@ describe("tag management", () => {
     expect(within(list).getByText("On 3 albums")).toBeInTheDocument();
   });
 
-  it("protects the built-in tag's name and existence but not its colour", async () => {
+  it("protects the built-in tag's name but not its colour, and lets it be deleted", async () => {
     renderApp("/settings");
     const name = await screen.findByLabelText("Name of Listen ASAP");
     expect(name).toHaveAttribute("readonly");
     expect(name).toHaveAccessibleDescription(/Its name is fixed/);
     const del = screen.getByRole("button", { name: "Delete tag Listen ASAP" });
-    expect(del).toHaveAccessibleDescription("Built-in tags can’t be deleted.");
+    expect(del).not.toHaveAttribute("aria-disabled");
     const hex = screen.getByLabelText("Listen ASAP colour (hex)");
     await userEvent.clear(hex);
     await userEvent.type(hex, "#10b981");
@@ -117,6 +117,18 @@ describe("tag management", () => {
     await userEvent.type(input, "road trip");
     await userEvent.click(screen.getByRole("button", { name: "Create tag" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("already exists");
+  });
+
+  it("deletes Listen ASAP after warning that Weighted Random depends on it", async () => {
+    vi.mocked(deleteTag).mockResolvedValue(0);
+    renderApp("/settings");
+    await userEvent.click(await screen.findByRole("button", { name: "Delete tag Listen ASAP" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete “Listen ASAP”?" });
+    expect(within(dialog).getByRole("note")).toHaveTextContent(
+      "Weighted Random in Next Up picks only from albums tagged Listen ASAP",
+    );
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete tag" }));
+    expect(deleteTag).toHaveBeenCalledWith(TAGS[0]?.id);
   });
 
   it("renames on blur and deletes after showing the impact", async () => {

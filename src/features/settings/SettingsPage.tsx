@@ -11,6 +11,7 @@ import { ProfileSettings } from "./ProfileSettings";
 import { MetadataSettings } from "./MetadataSettings";
 import { ListeningSettings } from "../listening/ListeningSettings";
 import { SyncSettings } from "../sync/SyncSettings";
+import { VersionSettings } from "./VersionSettings";
 import { TagManager } from "../tags/TagManager";
 
 type Storage =
@@ -58,10 +59,8 @@ function StorageFacts() {
       </dd>
       <dt>Schema</dt>
       <dd>v{r.schemaVersion}</dd>
-      <dt>Version</dt>
-      <dd>
-        MuDraft {r.appVersion} · SQLite {r.sqliteVersion}
-      </dd>
+      <dt>SQLite</dt>
+      <dd>{r.sqliteVersion}</dd>
     </dl>
   );
 }
@@ -83,6 +82,7 @@ export function SettingsPage() {
     <section>
       <PageHeader title="Settings" />
       <div className="settings-list">
+        <VersionSettings />
         <section className="panel section" aria-labelledby="settings-interface">
           <h2 id="settings-interface" className="section-title">
             Interface

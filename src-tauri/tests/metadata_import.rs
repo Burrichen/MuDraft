@@ -41,6 +41,8 @@ fn tag(name: &str, votes: i64) -> SourceTag {
 
 fn group() -> ReleaseGroupDetail {
     ReleaseGroupDetail {
+        primary_type: Some("Album".into()),
+        secondary_types: Some(vec![]),
         id: RG.into(),
         title: "OK Computer".into(),
         disambiguation: None,
@@ -619,5 +621,45 @@ impl WithPosition for TrackDetail {
     fn with_position(mut self, position: u32) -> Self {
         self.position = position;
         self
+    }
+}
+
+#[test]
+fn imports_record_the_release_type_and_refuse_spoken_word() {
+    let (_d, mut db) = open_temp();
+    import(&mut db, &group(), &release(REL, three_tracks()), None).unwrap();
+    let types = |db: &Database| -> (Option<String>, Option<String>) {
+        db.read(|c| {
+            Ok(
+                c.query_row("SELECT primary_type, secondary_types FROM album", [], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })?,
+            )
+        })
+        .unwrap()
+    };
+    assert_eq!(types(&db), (Some("Album".into()), Some("[]".into())));
+
+    // A refresh that learns the album is live records that.
+    let mut live = group();
+    live.secondary_types = Some(vec!["Live".into()]);
+    import(&mut db, &live, &release(REL, three_tracks()), None).unwrap();
+    assert_eq!(
+        types(&db),
+        (Some("Album".into()), Some(r#"["Live"]"#.into()))
+    );
+    // Details that don't say (saved before types were recorded) leave it as it was.
+    let mut unknown = group();
+    unknown.secondary_types = None;
+    import(&mut db, &unknown, &release(REL, three_tracks()), None).unwrap();
+    assert_eq!(types(&db).1, Some(r#"["Live"]"#.into()));
+
+    for spoken in ["Interview", "Audiobook", "audio drama"] {
+        let (_d2, mut other) = open_temp();
+        let mut g = group();
+        g.secondary_types = Some(vec![spoken.into()]);
+        let err = import(&mut other, &g, &release(REL, three_tracks()), None).unwrap_err();
+        assert_eq!(err.code(), "validation", "{spoken}");
+        assert_eq!(count(&other, "album"), 0, "nothing is written");
     }
 }

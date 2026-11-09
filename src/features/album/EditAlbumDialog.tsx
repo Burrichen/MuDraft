@@ -6,7 +6,6 @@ import { editAlbum, unlockField, type AlbumDetail, type AlbumEdit } from "../../
 const FIELD_LABEL: Record<string, string> = {
   title: "Title",
   original_date: "Original release date",
-  description: "Description",
 };
 
 function message(err: unknown): string {
@@ -15,10 +14,9 @@ function message(err: unknown): string {
 
 /** Edit album fields. Saved edits are kept when the album is refreshed from MusicBrainz. */
 export function EditAlbumDialog({ detail, onClose }: { detail: AlbumDetail; onClose: () => void }) {
-  const ids = { title: useId(), date: useId(), desc: useId() };
+  const ids = { title: useId(), date: useId() };
   const [title, setTitle] = useState(detail.title);
   const [date, setDate] = useState(detail.originalDate.value ?? "");
-  const [description, setDescription] = useState(detail.description?.text ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const linked = detail.musicbrainzReleaseGroupId !== null;
@@ -27,7 +25,6 @@ export function EditAlbumDialog({ detail, onClose }: { detail: AlbumDetail; onCl
     const edit: AlbumEdit = {};
     if (title.trim() !== detail.title) edit.title = title;
     if (date.trim() !== (detail.originalDate.value ?? "")) edit.originalDate = date.trim();
-    if (description.trim() !== (detail.description?.text ?? "")) edit.description = description;
     if (Object.keys(edit).length === 0) {
       onClose();
       return;
@@ -75,8 +72,8 @@ export function EditAlbumDialog({ detail, onClose }: { detail: AlbumDetail; onCl
       <div className="match">
         <p className="match-note">
           {linked
-            ? "Fields you change here are kept when the album is refreshed from MusicBrainz."
-            : "This album isn’t linked to MusicBrainz; your details are the only source."}
+            ? "Fields you change here are kept when the album’s details are refreshed."
+            : "This album isn’t linked to online metadata; your details are the only source."}
         </p>
         <div className="match-field">
           <label htmlFor={ids.title}>Title</label>
@@ -103,18 +100,6 @@ export function EditAlbumDialog({ detail, onClose }: { detail: AlbumDetail; onCl
             Use only what you know: a year, year and month, or a full date. Leave empty if unknown.
           </span>
         </div>
-        <div className="match-field">
-          <label htmlFor={ids.desc}>Description</label>
-          <textarea
-            id={ids.desc}
-            className="album-textarea"
-            rows={5}
-            value={description}
-            onChange={(e) => {
-              setDescription(e.target.value);
-            }}
-          />
-        </div>
         {linked && detail.lockedFields.some((f) => f in FIELD_LABEL) && (
           <div className="match-section">
             <h3 className="match-heading">Edited fields</h3>
@@ -125,7 +110,7 @@ export function EditAlbumDialog({ detail, onClose }: { detail: AlbumDetail; onCl
                   <li key={f}>
                     <span>{FIELD_LABEL[f]} is kept as you edited it.</span>{" "}
                     <Button variant="ghost" className="button-small" onClick={() => void unlock(f)}>
-                      Let MusicBrainz update {FIELD_LABEL[f]?.toLowerCase()} again
+                      Update {FIELD_LABEL[f]?.toLowerCase()} on refresh again
                     </Button>
                   </li>
                 ))}

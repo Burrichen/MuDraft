@@ -21,9 +21,11 @@ use super::state::{FORMAT_PATH, State};
 use super::{ConfirmReason, FirstSync, Limits, SyncOutcome, SyncRequest, SyncService};
 use crate::error::{AppError, AppResult};
 use crate::library::catalogue::{self, CreditInput, NewAlbum, NewArtist, NewEdition, NewTrack};
+use crate::library::discography;
 use crate::library::listening::{self, ListenKind, LogListen};
 use crate::library::personal::{self, CollectionSource};
-use crate::library::{metadata_import, ratings, tags};
+use crate::library::selection::{self, SelectionMode};
+use crate::library::{metadata_import, next_up, ratings, tags};
 use crate::paths::StorageProfile;
 use crate::state::AppState;
 
@@ -624,6 +626,223 @@ async fn genre_overrides_and_resets_sync_between_computers() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn next_up_slots_merge_with_one_slot_per_album_and_one_session_per_slot() {
+    let (_gh, a, b, _) = linked_pair().await;
+    let kid_a = add_album(&a, "Kid A");
+    synced(a.sync().await);
+    synced(b.sync().await);
+
+    // Both computers pick the same album by hand, into different slots.
+    a.write(|tx| next_up::choose(tx, None, &kid_a.edition, Some(2)));
+    b.write(|tx| next_up::choose(tx, None, &kid_a.edition, Some(4)));
+    // Both open a picking method in slot 5, and one each in slots 1 and 3.
+    a.write(|tx| selection::start_session(tx, 5, SelectionMode::CompletelyRandom, None));
+    b.write(|tx| selection::start_session(tx, 5, SelectionMode::WeightedRandom, None));
+    a.write(|tx| selection::start_session(tx, 1, SelectionMode::CompletelyRandom, None));
+    b.write(|tx| selection::start_session(tx, 3, SelectionMode::WeightedRandom, None));
+    synced(a.sync().await);
+    synced(b.sync().await);
+    synced(a.sync().await);
+    assert_eq!(a.dump(), b.dump());
+
+    // The album stays in the lowest slot only.
+    assert_eq!(
+        b.text("SELECT group_concat(slot) FROM current_selection"),
+        Some("2".into())
+    );
+    // Slots keep their own sessions; slot 5's duplicate is closed.
+    assert_eq!(
+        b.text(
+            "SELECT group_concat(slot) FROM (SELECT slot FROM selection_session
+             WHERE ended_at IS NULL AND mode != 'manual' ORDER BY slot)"
+        ),
+        Some("1,3,5".into())
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn deleting_listen_asap_on_one_computer_deletes_it_on_the_other() {
+    let (_gh, a, b, album) = linked_pair().await;
+    let asap = crate::library::catalogue::LISTEN_ASAP_TAG_ID;
+    a.write(|tx| catalogue::tag_album(tx, &album.album, asap));
+    synced(a.sync().await);
+    synced(b.sync().await);
+    assert_eq!(b.int("SELECT COUNT(*) FROM album_tag"), Some(1));
+
+    a.write(|tx| tags::delete(tx, asap));
+    synced(a.sync().await);
+    synced(b.sync().await);
+    for dev in [&a, &b] {
+        assert_eq!(
+            dev.int("SELECT COUNT(*) FROM tag WHERE builtin_key IS NOT NULL"),
+            Some(0)
+        );
+        assert_eq!(dev.int("SELECT COUNT(*) FROM album_tag"), Some(0));
+    }
+    assert_eq!(a.dump(), b.dump());
+}
+
+const CAT_ARTIST: &str = "a74b1b7f-71a5-4011-9441-d0b5e4122711";
+
+fn cat_group(n: u32) -> String {
+    format!("c0000000-0000-4000-8000-00000000000{n}")
+}
+
+/// One complete page of the artist's catalogue, as fetched at `at`.
+fn record_catalogue(dev: &Device, artist: &str, titles: &[&str], at: &str) {
+    use crate::metadata::{CatalogueReleaseGroup, CreditPart, ProviderDate, ReleaseGroupPage};
+    let page = ReleaseGroupPage {
+        release_groups: titles
+            .iter()
+            .enumerate()
+            .map(|(i, t)| CatalogueReleaseGroup {
+                id: cat_group(i as u32 + 1),
+                title: (*t).into(),
+                disambiguation: None,
+                primary_type: Some("Album".into()),
+                secondary_types: vec![],
+                original_date: ProviderDate::parse(Some("2000")),
+                artist_credit: vec![CreditPart {
+                    artist_id: CAT_ARTIST.into(),
+                    artist_name: "Radiohead".into(),
+                    sort_name: None,
+                    disambiguation: None,
+                    credited_name: None,
+                    join_phrase: String::new(),
+                }],
+            })
+            .collect(),
+        total: titles.len() as u32,
+        offset: 0,
+        received: titles.len() as u32,
+    };
+    dev.write(|tx| {
+        discography::begin_pass(tx, artist, CAT_ARTIST)?;
+        discography::record_page(tx, artist, &page, at)
+    });
+}
+
+fn catalogue_of(dev: &Device, artist: &str) -> discography::ArtistCatalogue {
+    dev.state
+        .with_db(|db| db.read(|c| discography::catalogue(c, artist)))
+        .unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_discography_fetched_on_one_computer_shows_progress_on_the_other() {
+    let (_gh, a, b, _) = linked_pair().await;
+    let kid_a = add_album_with(&a, "Kid A", Some(CAT_ARTIST), Some(&cat_group(1)));
+    let artist = a
+        .text(&format!(
+            "SELECT id FROM artist WHERE musicbrainz_id = '{CAT_ARTIST}'"
+        ))
+        .unwrap();
+    record_catalogue(
+        &a,
+        &artist,
+        &["Kid A", "Amnesiac", "Hail to the Thief"],
+        "2026-11-09T10:00:00Z",
+    );
+    synced(a.sync().await);
+    synced(b.sync().await);
+
+    // B never fetched, yet shows the same catalogue and progress.
+    let on_b = catalogue_of(&b, &artist);
+    assert_eq!(on_b.entries.len(), 3);
+    assert_eq!(on_b.progress.albums_counted, 3);
+    assert_eq!(on_b.progress.albums_listened, 0);
+
+    // A listen logged on B updates progress on A after a sync.
+    listen(&b, &kid_a.edition, "2026-11-08");
+    synced(b.sync().await);
+    synced(a.sync().await);
+    assert_eq!(catalogue_of(&a, &artist).progress.albums_listened, 1);
+
+    // The user's corrections travel too: an excluded album and a wider scope.
+    let amnesiac = on_b.entries.iter().find(|e| e.title == "Amnesiac").unwrap();
+    b.write(|tx| discography::set_excluded(tx, amnesiac.id.as_deref().unwrap(), true));
+    b.write(|tx| {
+        discography::set_scope(
+            tx,
+            &artist,
+            &discography::Scope {
+                primary_types: vec!["Album".into(), "EP".into()],
+                secondary_types: vec![],
+            },
+        )
+    });
+    synced(b.sync().await);
+    synced(a.sync().await);
+    let on_a = catalogue_of(&a, &artist);
+    assert!(
+        on_a.entries
+            .iter()
+            .any(|e| e.title == "Amnesiac" && e.excluded)
+    );
+    assert_eq!(on_a.scope.primary_types, ["Album", "EP"]);
+    assert_eq!(on_a.progress.albums_counted, 2);
+    assert_eq!(a.dump(), b.dump());
+}
+
+#[tokio::test(start_paused = true)]
+async fn both_computers_fetching_one_artist_merge_into_one_catalogue_without_conflicts() {
+    let (_gh, a, b, _) = linked_pair().await;
+    add_album_with(&a, "Kid A", Some(CAT_ARTIST), Some(&cat_group(1)));
+    synced(a.sync().await);
+    synced(b.sync().await);
+    let artist = a
+        .text(&format!(
+            "SELECT id FROM artist WHERE musicbrainz_id = '{CAT_ARTIST}'"
+        ))
+        .unwrap();
+    // Separate fetches: different entry IDs, times, and (later) a corrected title.
+    record_catalogue(&a, &artist, &["Kid A", "Amnesiac"], "2026-11-09T10:00:00Z");
+    record_catalogue(
+        &b,
+        &artist,
+        &["Kid A", "Amnesiac (Remastered)"],
+        "2026-11-09T12:00:00Z",
+    );
+    synced(a.sync().await);
+    synced(b.sync().await);
+    synced(a.sync().await);
+    assert_eq!(a.dump(), b.dump());
+    for dev in [&a, &b] {
+        assert_eq!(dev.int("SELECT COUNT(*) FROM catalogue_entry"), Some(2));
+        assert_eq!(dev.int("SELECT COUNT(*) FROM artist_catalogue"), Some(1));
+        let titles: Vec<String> = catalogue_of(dev, &artist)
+            .entries
+            .iter()
+            .map(|e| e.title.clone())
+            .collect();
+        assert!(
+            titles.contains(&"Amnesiac (Remastered)".to_owned()),
+            "{titles:?}: newer fetch wins"
+        );
+    }
+
+    // A refetch on each side again (bookkeeping differs) still merges silently.
+    record_catalogue(&a, &artist, &["Kid A", "Amnesiac"], "2026-11-10T09:00:00Z");
+    record_catalogue(
+        &b,
+        &artist,
+        &["Kid A", "Amnesiac (Remastered)"],
+        "2026-11-10T08:00:00Z",
+    );
+    synced(a.sync().await);
+    synced(b.sync().await);
+    synced(a.sync().await);
+    assert_eq!(a.dump(), b.dump());
+    assert_eq!(
+        a.text(&format!(
+            "SELECT title FROM catalogue_entry WHERE musicbrainz_release_group_id = '{}'",
+            cat_group(2)
+        )),
+        Some("Amnesiac".into())
+    );
+}
+
+#[tokio::test(start_paused = true)]
 async fn listen_list_progress_syncs_and_clears_everywhere_once_logged() {
     let (_gh, a, b, album) = linked_pair().await;
     let marked = |dev: &Device| dev.int("SELECT COUNT(*) FROM listen_list_track");
@@ -885,14 +1104,40 @@ async fn damaged_newer_unrelated_or_public_repositories_are_refused() {
     assert!(err.to_string().contains("damaged"), "{err}");
     assert_eq!(b.dump(), before, "nothing changed");
 
-    // Data written at an older schema (before Listen List progress existed) is upgraded
-    // with the normal migrations.
+    // Data written at an older schema (before Listen List progress and Next Up slots
+    // existed) is upgraded with the normal migrations.
     let good = gh.file("sync/state/album.json").unwrap();
     let progress = "sync/state/listen_list_track.json";
     let progress_file = gh.file(progress).unwrap();
+    // Columns added after schema 11 are absent from files written then.
+    let strip = |bytes: &[u8], columns: &[&str]| -> Vec<u8> {
+        let mut data: Value = serde_json::from_slice(bytes).unwrap();
+        for column in columns {
+            let i = data["columns"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .position(|c| c == column)
+                .unwrap();
+            data["columns"].as_array_mut().unwrap().remove(i);
+            for row in data["rows"].as_array_mut().unwrap() {
+                row.as_array_mut().unwrap().remove(i);
+            }
+        }
+        serde_json::to_vec(&data).unwrap()
+    };
+    let sessions = "sync/state/selection_session.json";
+    let sessions_file = gh.file(sessions).unwrap();
+    let old_sessions = strip(&sessions_file, &["slot"]);
+    let albums = "sync/state/album.json";
+    let old_albums = strip(
+        &good[..good.len() - 1],
+        &["primary_type", "secondary_types"],
+    );
     gh.commit_files(&[
-        ("sync/state/album.json", Some(&good[..good.len() - 1])),
+        (albums, Some(&old_albums)),
         (progress, None),
+        (sessions, Some(&old_sessions)),
     ]);
     let current = format.clone();
     format["schemaVersion"] = json!(11);
@@ -900,14 +1145,31 @@ async fn damaged_newer_unrelated_or_public_repositories_are_refused() {
         .as_array_mut()
         .unwrap()
         .retain(|f| f["path"] != progress);
+    for f in format["files"].as_array_mut().unwrap() {
+        for (path, bytes) in [(sessions, &old_sessions), (albums, &old_albums)] {
+            if f["path"] == path {
+                f["bytes"] = json!(bytes.len());
+                f["sha256"] = json!(crate::profile::sha256_hex(bytes));
+            }
+        }
+    }
     gh.commit_files(&[(FORMAT_PATH, Some(&serde_json::to_vec(&format).unwrap()))]);
     synced(b.sync().await);
     assert_eq!(b.dump(), before);
 
     // A table that didn't exist at the claimed schema is damage, reported in words.
-    gh.commit_files(&[(progress, Some(&progress_file))]);
+    gh.commit_files(&[
+        (progress, Some(&progress_file)),
+        (sessions, Some(&sessions_file)),
+    ]);
     let mut stale = current.clone();
     stale["schemaVersion"] = json!(11);
+    for f in stale["files"].as_array_mut().unwrap() {
+        if f["path"] == albums {
+            f["bytes"] = json!(old_albums.len());
+            f["sha256"] = json!(crate::profile::sha256_hex(&old_albums));
+        }
+    }
     gh.commit_files(&[(FORMAT_PATH, Some(&serde_json::to_vec(&stale).unwrap()))]);
     let err = b.sync().await.unwrap_err();
     assert!(
@@ -915,7 +1177,10 @@ async fn damaged_newer_unrelated_or_public_repositories_are_refused() {
             .contains("doesn't exist at this schema version"),
         "{err}"
     );
-    gh.commit_files(&[(FORMAT_PATH, Some(&serde_json::to_vec(&current).unwrap()))]);
+    gh.commit_files(&[
+        (FORMAT_PATH, Some(&serde_json::to_vec(&current).unwrap())),
+        (albums, Some(&good[..good.len() - 1])),
+    ]);
 
     // An unrelated repository (say, the app's source) is never written to.
     let unrelated = Arc::new(MockGitHub::new(TOKEN));

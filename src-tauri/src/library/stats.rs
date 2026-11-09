@@ -6,6 +6,10 @@
 //!   many editions or re-listens. Zero is a rating; unrated albums are left out. No
 //!   smoothing or penalties; the "Top rated" rankings consider only groups with at least
 //!   [`TOP_MIN_ALBUMS`] rated albums and list the best [`TOP_LIMIT`].
+//! - "Top rated" by tracks ranks the same groups by the mean of individual track ratings
+//!   (each rated recording once per album, its editions' ratings averaged), placed by its
+//!   album's year and genres and by its credited artists (the album's when it has none).
+//!   The same minimum applies: tracks from at least [`TOP_MIN_ALBUMS`] different albums.
 //! - "Various Artists" (MusicBrainz's placeholder for compilations) is not an artist and is
 //!   left out of artist counts and rankings.
 //! - Selection completion comes from stored attempt provenance, never from current tags.
@@ -101,7 +105,6 @@ pub struct ListenListStats {
     pub genres: Vec<Count>,
     pub albums_without_genre: u32,
     pub tags: Vec<Count>,
-    pub listen_asap: u32,
     pub recently_added: Vec<Waiting>,
     pub oldest_waiting: Vec<Waiting>,
     pub waiting: Option<WaitingSummary>,
@@ -173,24 +176,13 @@ pub fn listen_list(conn: &Connection, now: &str) -> AppResult<ListenListStats> {
     )?;
 
     let mut tags: HashMap<String, (String, u32)> = HashMap::new();
-    let mut listen_asap = 0;
     let mut stmt = conn.prepare(
-        "SELECT t.id, t.name, t.builtin_key = 'listen_asap', COUNT(DISTINCT x.album_id)
+        "SELECT t.id, t.name, COUNT(DISTINCT x.album_id)
          FROM album_tag x JOIN tag t ON t.id = x.tag_id
          WHERE x.album_id IN (SELECT album_id FROM listen_list_entry) GROUP BY t.id",
     )?;
-    for row in stmt.query_map([], |r| {
-        Ok((
-            r.get(0)?,
-            r.get(1)?,
-            r.get::<_, Option<bool>>(2)?,
-            r.get(3)?,
-        ))
-    })? {
-        let (id, name, asap, n): (String, String, Option<bool>, u32) = row?;
-        if asap == Some(true) {
-            listen_asap = n;
-        }
+    for row in stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))? {
+        let (id, name, n): (String, String, u32) = row?;
         tags.insert(id, (name, n));
     }
 
@@ -263,7 +255,6 @@ pub fn listen_list(conn: &Connection, now: &str) -> AppResult<ListenListStats> {
         genres: counts(genres),
         albums_without_genre,
         tags: counts(tags),
-        listen_asap,
         recently_added,
         oldest_waiting,
         waiting: summary,
@@ -312,8 +303,11 @@ pub struct GroupScore {
     pub key: String,
     pub label: String,
     pub mean_stars: f64,
-    /// Sample size: rated albums in the group. Shown, never used to penalize.
+    /// Sample size: rated albums in the group (albums with rated tracks, when ranking by
+    /// tracks). Shown, never used to penalize.
     pub albums: u32,
+    /// Rated tracks behind `mean_stars` when ranking by tracks; `None` for album rankings.
+    pub tracks: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -370,20 +364,59 @@ pub struct CollectionStats {
     pub best_genre: Best,
     /// Collaborations count once for each credited artist.
     pub best_artist: Best,
+    /// The same rankings, scored by individual track ratings instead of album scores.
+    pub track_rankings: TrackRankings,
     pub favourite_tracks: Vec<FavouriteTrack>,
     pub runtime: ListeningRuntime,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackRankings {
+    /// Rated tracks counted (after merging a recording's editions).
+    pub rated_tracks: u32,
+    pub best_year: Best,
+    pub best_decade: Best,
+    pub best_genre: Best,
+    pub best_artist: Best,
+}
+
 fn best(groups: HashMap<String, (String, Vec<f64>)>, unplaced_albums: u32) -> Best {
-    let mut groups: Vec<GroupScore> = groups
-        .into_iter()
-        .map(|(key, (label, scores))| GroupScore {
-            key,
-            label,
-            mean_stars: scores.iter().sum::<f64>() / scores.len() as f64,
-            albums: scores.len() as u32,
-        })
-        .collect();
+    rank(
+        groups
+            .into_iter()
+            .map(|(key, (label, scores))| GroupScore {
+                key,
+                label,
+                mean_stars: scores.iter().sum::<f64>() / scores.len() as f64,
+                albums: scores.len() as u32,
+                tracks: None,
+            })
+            .collect(),
+        unplaced_albums,
+    )
+}
+
+/// A group of rated tracks: its label, the tracks' stars, and the albums they come from.
+type TrackGroup = (String, Vec<f64>, HashSet<String>);
+
+fn best_by_tracks(groups: HashMap<String, TrackGroup>, unplaced: u32) -> Best {
+    rank(
+        groups
+            .into_iter()
+            .map(|(key, (label, scores, albums))| GroupScore {
+                key,
+                label,
+                mean_stars: scores.iter().sum::<f64>() / scores.len() as f64,
+                albums: albums.len() as u32,
+                tracks: Some(scores.len() as u32),
+            })
+            .collect(),
+        unplaced,
+    )
+}
+
+fn rank(mut groups: Vec<GroupScore>, unplaced_albums: u32) -> Best {
     groups.sort_by(|a, b| {
         b.mean_stars
             .total_cmp(&a.mean_stars)
@@ -401,6 +434,134 @@ fn best(groups: HashMap<String, (String, Vec<f64>)>, unplaced_albums: u32) -> Be
         groups,
         unplaced_albums,
     }
+}
+
+/// Rankings from individual track ratings of Collection albums.
+fn track_rankings(conn: &Connection) -> AppResult<TrackRankings> {
+    struct Rated {
+        album_id: String,
+        year: Option<i64>,
+        stars: Vec<f64>,
+        track_ids: Vec<String>,
+    }
+    let mut stmt = conn.prepare(
+        "SELECT e.album_id, COALESCE(t.recording_id, t.id), t.id, tr.rating, a.original_year
+         FROM track_rating tr
+         JOIN track t ON t.id = tr.track_id
+         JOIN edition e ON e.id = t.edition_id
+         JOIN album a ON a.id = e.album_id
+         WHERE tr.rating IS NOT NULL
+           AND e.album_id IN (SELECT album_id FROM collection_entry)
+         ORDER BY e.album_id, t.id",
+    )?;
+    // One entry per recording per album; editions of the same recording are averaged.
+    let mut recordings: BTreeMap<(String, String), Rated> = BTreeMap::new();
+    for row in stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, i64>(3)?,
+            r.get::<_, Option<i64>>(4)?,
+        ))
+    })? {
+        let (album_id, recording, track_id, rating, year) = row?;
+        let entry = recordings
+            .entry((album_id.clone(), recording))
+            .or_insert_with(|| Rated {
+                album_id,
+                year,
+                stars: vec![],
+                track_ids: vec![],
+            });
+        entry.stars.push(rating as f64 / 2.0);
+        entry.track_ids.push(track_id);
+    }
+
+    let mut genres_of: HashMap<String, Vec<String>> = HashMap::new();
+    let mut album_artists: HashMap<String, Vec<(String, String)>> = HashMap::new();
+    let mut g = conn.prepare(
+        "SELECT g.name FROM album_genre ag JOIN genre g ON g.id = ag.genre_id WHERE ag.album_id = ?1",
+    )?;
+    let mut aa = conn.prepare(&format!(
+        "SELECT ar.id, ar.name FROM album_artist_credit c JOIN artist ar ON ar.id = c.artist_id
+         WHERE c.album_id = ?1 AND {REAL_ARTIST}"
+    ))?;
+    let mut ta = conn.prepare(&format!(
+        "SELECT ar.id, ar.name, ({REAL_ARTIST})
+         FROM track_artist_credit c JOIN artist ar ON ar.id = c.artist_id
+         WHERE c.track_id = ?1 ORDER BY c.position"
+    ))?;
+
+    let mut by_year: HashMap<String, TrackGroup> = HashMap::new();
+    let mut by_decade: HashMap<String, TrackGroup> = HashMap::new();
+    let mut by_genre: HashMap<String, TrackGroup> = HashMap::new();
+    let mut by_artist: HashMap<String, TrackGroup> = HashMap::new();
+    let (mut no_year, mut no_genre) = (0, 0);
+    let add =
+        |map: &mut HashMap<String, TrackGroup>, key: &str, label: &str, stars, album: &str| {
+            let e = map
+                .entry(key.to_owned())
+                .or_insert_with(|| (label.to_owned(), vec![], HashSet::new()));
+            e.1.push(stars);
+            e.2.insert(album.to_owned());
+        };
+    for r in recordings.values() {
+        let stars = r.stars.iter().sum::<f64>() / r.stars.len() as f64;
+        match r.year {
+            Some(y) => {
+                let y_key = format!("{y:04}");
+                add(&mut by_year, &y_key, &y_key, stars, &r.album_id);
+                let d = format!("{:04}", decade_of(y));
+                add(&mut by_decade, &d, &format!("{d}s"), stars, &r.album_id);
+            }
+            None => no_year += 1,
+        }
+        if !genres_of.contains_key(&r.album_id) {
+            let names = g
+                .query_map(params![r.album_id], |row| row.get(0))?
+                .collect::<Result<Vec<String>, _>>()?;
+            genres_of.insert(r.album_id.clone(), names);
+        }
+        let genres = &genres_of[&r.album_id];
+        if genres.is_empty() {
+            no_genre += 1;
+        }
+        for name in genres {
+            add(&mut by_genre, name, name, stars, &r.album_id);
+        }
+        // The first edition's track credits; the album's credits when the track has none.
+        let credits: Vec<(String, String, bool)> = ta
+            .query_map(params![r.track_ids[0]], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<Result<_, _>>()?;
+        let artists: Vec<(String, String)> = if credits.is_empty() {
+            if !album_artists.contains_key(&r.album_id) {
+                let list = aa
+                    .query_map(params![r.album_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                album_artists.insert(r.album_id.clone(), list);
+            }
+            album_artists[&r.album_id].clone()
+        } else {
+            credits
+                .into_iter()
+                .filter(|(_, _, real)| *real)
+                .map(|(id, name, _)| (id, name))
+                .collect()
+        };
+        for (id, name) in &artists {
+            add(&mut by_artist, id, name, stars, &r.album_id);
+        }
+    }
+    Ok(TrackRankings {
+        rated_tracks: recordings.len() as u32,
+        best_year: best_by_tracks(by_year, no_year),
+        best_decade: best_by_tracks(by_decade, no_year),
+        best_genre: best_by_tracks(by_genre, no_genre),
+        best_artist: best_by_tracks(by_artist, 0),
+    })
 }
 
 struct RatedAlbum {
@@ -577,6 +738,7 @@ pub fn collection(conn: &Connection) -> AppResult<CollectionStats> {
         best_decade: best(by_decade, no_year),
         best_genre: best(by_genre, no_genre),
         best_artist: best(by_artist, 0),
+        track_rankings: track_rankings(conn)?,
         favourite_tracks,
         runtime: listening_runtime(conn)?,
     })

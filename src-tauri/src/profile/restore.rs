@@ -351,6 +351,11 @@ pub fn stage(archive: &Path, staging: &Path) -> AppResult<Preview> {
             }
             load_table(&tx, &data, entry.rows, &mut tag_remap)?;
         }
+        // A profile whose Listen ASAP tag was deleted doesn't get it back from the freshly
+        // created database (which always starts with it).
+        if manifest.tables.iter().any(|t| t.name == "tag") && tag_remap.is_empty() {
+            tx.execute("DELETE FROM tag WHERE builtin_key = 'listen_asap'", [])?;
+        }
         tx.commit()?;
         validate_staged(&conn, &manifest)?;
     }
@@ -407,10 +412,9 @@ fn validate_staged(conn: &Connection, manifest: &Manifest) -> AppResult<()> {
             [],
             |r| r.get(0),
         )?;
-        if builtin != 1 {
-            return Err(corrupt(
-                "the built-in Listen ASAP tag is missing or duplicated",
-            ));
+        // Zero when the profile's owner deleted Listen ASAP; never more than one.
+        if builtin > 1 {
+            return Err(corrupt("the built-in Listen ASAP tag is duplicated"));
         }
     }
     let assets: HashMap<String, u64> = manifest

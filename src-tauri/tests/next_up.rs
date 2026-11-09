@@ -57,7 +57,7 @@ fn method(json: serde_json::Value) -> Method {
 }
 
 fn roll_with(db: &mut Database, m: &Method, year: i32) -> AppResult<RollOutcome> {
-    db.write(|tx| next_up::roll(tx, Some(&new_id()), m.clone(), year, &mut First))
+    db.write(|tx| next_up::roll(tx, Some(&new_id()), 1, m.clone(), year, &mut First))
 }
 
 fn roll(db: &mut Database, m: &Method) -> RollOutcome {
@@ -76,6 +76,20 @@ fn pool_size(outcome: &RollOutcome) -> usize {
         RollOutcome::Picked { pool_size, .. } | RollOutcome::Exhausted { pool_size } => *pool_size,
         RollOutcome::Empty { .. } => 0,
     }
+}
+
+/// One slot's view; an unused slot has neither a pick nor a session.
+fn slot(db: &Database, n: i64) -> next_up::SlotState {
+    db.read(|c| next_up::state(c, YEAR))
+        .unwrap()
+        .slots
+        .into_iter()
+        .find(|s| s.slot == n)
+        .unwrap_or(next_up::SlotState {
+            slot: n,
+            current: None,
+            session: None,
+        })
 }
 
 fn attempt_status(db: &Database, id: &str) -> String {
@@ -126,15 +140,15 @@ fn zero_one_and_many_candidates_never_repeat_until_reset() {
         RollOutcome::Exhausted { pool_size: 3 }
     );
     // Exhaustion changes nothing: the last pick stays current and shown.
-    let state = db.read(|c| next_up::state(c, YEAR)).unwrap();
+    let state = slot(&db, 1);
     let current = state.current.unwrap();
     assert_eq!(current.attempt_id, previous);
     assert_eq!(current.status, AttemptStatus::Shown);
     assert!(state.session.as_ref().unwrap().exhausted);
 
-    assert_eq!(db.write(next_up::reset_pool).unwrap(), 2);
+    assert_eq!(db.write(|tx| next_up::reset_pool(tx, 1)).unwrap(), 2);
     assert_eq!(
-        db.write(next_up::reset_pool).unwrap(),
+        db.write(|tx| next_up::reset_pool(tx, 1)).unwrap(),
         2,
         "double reset is one reset"
     );
@@ -160,12 +174,7 @@ fn weighted_random_uses_only_listen_asap_without_fallback() {
             reason: EmptyReason::NoListenAsap
         }
     );
-    assert!(
-        db.read(|c| next_up::state(c, YEAR))
-            .unwrap()
-            .current
-            .is_none()
-    );
+    assert!(slot(&db, 1).current.is_none());
 
     db.write(|tx| catalogue::tag_album(tx, &b, LISTEN_ASAP))
         .unwrap();
@@ -177,6 +186,22 @@ fn weighted_random_uses_only_listen_asap_without_fallback() {
     assert_eq!(
         roll(&mut db, &weighted),
         RollOutcome::Exhausted { pool_size: 1 }
+    );
+    let options = |db: &Database| {
+        db.read(|c| next_up::options(c, GuidedCriteria::default(), YEAR))
+            .unwrap()
+    };
+    assert!(options(&db).listen_asap_tag);
+
+    // With the tag deleted, Weighted Random has nothing to pick from: still no fallback.
+    db.write(|tx| tags::delete(tx, LISTEN_ASAP)).unwrap();
+    assert!(!options(&db).listen_asap_tag);
+    assert_eq!(options(&db).listen_asap, 0);
+    assert_eq!(
+        roll_in(&mut db, 2, &weighted),
+        RollOutcome::Empty {
+            reason: EmptyReason::NoListenAsap
+        }
     );
 }
 
@@ -282,14 +307,7 @@ fn changing_method_or_criteria_starts_a_new_session() {
     // Back to random: a fresh pool, so earlier albums may be shown again.
     let again = picked(roll(&mut db, &random));
     assert_ne!(again.session_id, a.session_id);
-    assert_eq!(
-        db.read(|c| next_up::state(c, YEAR))
-            .unwrap()
-            .session
-            .unwrap()
-            .remaining,
-        2
-    );
+    assert_eq!(slot(&db, 1).session.unwrap().remaining, 2);
 }
 
 #[test]
@@ -304,13 +322,7 @@ fn stale_candidates_are_revalidated_after_list_and_tag_edits() {
     let weighted = Method::WeightedRandom;
     let first = picked(roll(&mut db, &weighted));
     assert_eq!(first.album_id, a);
-    let eligibility = |db: &Database| {
-        db.read(|c| next_up::state(c, YEAR))
-            .unwrap()
-            .current
-            .unwrap()
-            .eligibility
-    };
+    let eligibility = |db: &Database| slot(db, 1).current.unwrap().eligibility;
     assert_eq!(eligibility(&db), Eligibility::Eligible);
 
     db.write(|tx| catalogue::untag_album(tx, &a, LISTEN_ASAP))
@@ -356,10 +368,10 @@ fn provenance_manual_picks_and_completion_link_the_listen() {
     // Double click: the same request ID rolls once.
     let key = new_id();
     let once = db
-        .write(|tx| next_up::roll(tx, Some(&key), random.clone(), YEAR, &mut First))
+        .write(|tx| next_up::roll(tx, Some(&key), 1, random.clone(), YEAR, &mut First))
         .unwrap();
     let twice = db
-        .write(|tx| next_up::roll(tx, Some(&key), random.clone(), YEAR, &mut First))
+        .write(|tx| next_up::roll(tx, Some(&key), 1, random.clone(), YEAR, &mut First))
         .unwrap();
     assert_eq!(once, twice);
     assert_eq!(count(&db, "selection_attempt"), 1);
@@ -370,11 +382,11 @@ fn provenance_manual_picks_and_completion_link_the_listen() {
     );
 
     let manual = db
-        .write(|tx| next_up::choose(tx, Some(&new_id()), &ed_b))
+        .write(|tx| next_up::choose(tx, Some(&new_id()), &ed_b, Some(1)))
         .unwrap();
     assert_eq!(manual.source, SelectionSource::Manual);
     assert_eq!(attempt_status(&db, &rolled.attempt_id), "skipped");
-    let state = db.read(|c| next_up::state(c, YEAR)).unwrap();
+    let state = slot(&db, 1);
     assert_eq!(
         state.current.as_ref().unwrap().source,
         SelectionSource::Manual
@@ -392,7 +404,7 @@ fn provenance_manual_picks_and_completion_link_the_listen() {
         edition(&mut db, &al, "Standard", 1)
     };
     assert_eq!(
-        db.write(|tx| next_up::choose(tx, None, &off_list))
+        db.write(|tx| next_up::choose(tx, None, &off_list, None))
             .unwrap_err()
             .code(),
         "validation"
@@ -436,12 +448,7 @@ fn provenance_manual_picks_and_completion_link_the_listen() {
         .unwrap();
     assert_eq!(linked, manual.attempt_id);
     // Cleared, and nothing else is selected automatically.
-    assert!(
-        db.read(|c| next_up::state(c, YEAR))
-            .unwrap()
-            .current
-            .is_none()
-    );
+    assert!(slot(&db, 1).current.is_none());
     assert_eq!(
         count(&db, "listen_list_entry"),
         1,
@@ -461,7 +468,7 @@ fn current_selection_and_pool_survive_restart() {
         picked(roll(&mut db, &Method::CompletelyRandom))
     };
     let mut db = Database::open(&path).unwrap();
-    let state = db.read(|c| next_up::state(c, YEAR)).unwrap();
+    let state = slot(&db, 1);
     assert_eq!(state.current.unwrap().attempt_id, shown.attempt_id);
     assert_eq!(state.session.unwrap().remaining, 1);
     let next = picked(roll(&mut db, &Method::CompletelyRandom));
@@ -569,11 +576,7 @@ fn state_explains_the_match_and_clear_selects_nothing_new() {
         "tagIds": { "any_of": [road] }
     }}));
     picked(roll(&mut db, &guided));
-    let current = db
-        .read(|c| next_up::state(c, YEAR))
-        .unwrap()
-        .current
-        .unwrap();
+    let current = slot(&db, 1).current.unwrap();
     assert_eq!(current.item.title, "Match");
     assert_eq!(current.matched.years, [YearChoice::Decade(1990)]);
     assert_eq!(current.matched.genres, ["Rock"]);
@@ -590,15 +593,172 @@ fn state_explains_the_match_and_clear_selects_nothing_new() {
     db.read(|c| next_up::state(c, YEAR)).unwrap();
     assert_eq!(count(&db, "selection_attempt"), 1);
 
-    assert!(db.write(next_up::clear).unwrap());
+    assert!(db.write(|tx| next_up::clear(tx, 1)).unwrap());
     assert_eq!(attempt_status(&db, &current.attempt_id), "skipped");
-    assert!(
-        db.read(|c| next_up::state(c, YEAR))
-            .unwrap()
-            .current
-            .is_none()
-    );
-    assert!(!db.write(next_up::clear).unwrap());
+    assert!(slot(&db, 1).current.is_none());
+    assert!(!db.write(|tx| next_up::clear(tx, 1)).unwrap());
     assert_eq!(count(&db, "listen_event"), 0);
     assert_eq!(count(&db, "listen_list_entry"), 1);
+}
+
+fn roll_in(db: &mut Database, slot: i64, m: &Method) -> RollOutcome {
+    db.write(|tx| next_up::roll(tx, Some(&new_id()), slot, m.clone(), YEAR, &mut First))
+        .unwrap()
+}
+
+fn used(db: &Database) -> Vec<i64> {
+    db.read(|c| next_up::state(c, YEAR))
+        .unwrap()
+        .slots
+        .iter()
+        .map(|s| s.slot)
+        .collect()
+}
+
+#[test]
+fn slots_pick_independently_and_never_share_an_album() {
+    let (_d, mut db) = open_temp();
+    let (a, _) = entry(&mut db, "A", Some("2001"), &["Rock"]);
+    let (b, _) = entry(&mut db, "B", Some("2002"), &["Rock"]);
+    let (c, _) = entry(&mut db, "C", Some("2003"), &["Pop"]);
+    let random = Method::CompletelyRandom;
+
+    let one = picked(roll_in(&mut db, 1, &random));
+    assert_eq!(one.album_id, a);
+    let two = picked(roll_in(&mut db, 2, &random));
+    assert_eq!((two.slot, two.album_id.as_str()), (2, b.as_str()));
+    assert_ne!(one.session_id, two.session_id, "each slot has its own pool");
+
+    // Rerolling slot 2 leaves slot 1 alone and never offers its album.
+    let again = picked(roll_in(&mut db, 2, &random));
+    assert_eq!(
+        (again.album_id.as_str(), again.session_id.as_str()),
+        (c.as_str(), two.session_id.as_str())
+    );
+    assert_eq!(attempt_status(&db, &one.attempt_id), "shown");
+    assert_eq!(attempt_status(&db, &two.attempt_id), "skipped");
+    assert_eq!(
+        roll_in(&mut db, 2, &random),
+        RollOutcome::Exhausted { pool_size: 2 }
+    );
+    assert_eq!(used(&db), [1, 2]);
+    assert_eq!(
+        db.read(|c| next_up::state(c, YEAR)).unwrap().next_free_slot,
+        Some(3)
+    );
+    // Slot 1 has seen A; C is slot 2's pick, so only B can still come up.
+    assert_eq!(slot(&db, 1).session.unwrap().remaining, 1);
+    assert!(slot(&db, 2).session.unwrap().exhausted);
+
+    assert_eq!(picked(roll_in(&mut db, 3, &random)).album_id, b);
+    // Every album is now some slot's pick, which differs from nothing matching at all;
+    // neither outcome starts a slot.
+    assert_eq!(
+        roll_in(&mut db, 4, &random),
+        RollOutcome::Empty {
+            reason: EmptyReason::AllInNextUp
+        }
+    );
+    assert_eq!(
+        roll_in(&mut db, 4, &Method::WeightedRandom),
+        RollOutcome::Empty {
+            reason: EmptyReason::NoListenAsap
+        }
+    );
+    assert_eq!(used(&db), [1, 2, 3]);
+
+    // Pools reset per slot.
+    assert_eq!(db.write(|tx| next_up::reset_pool(tx, 2)).unwrap(), 2);
+    assert_eq!(slot(&db, 1).session.unwrap().pool_cycle, 1);
+    assert_eq!(
+        db.write(|tx| next_up::reset_pool(tx, 4))
+            .unwrap_err()
+            .code(),
+        "not_found"
+    );
+    for bad in [0, 6] {
+        let err = db
+            .write(|tx| next_up::roll(tx, None, bad, random.clone(), YEAR, &mut First))
+            .unwrap_err();
+        assert_eq!(err.code(), "validation");
+    }
+}
+
+#[test]
+fn manual_picks_fill_free_slots_and_remove_or_listen_touch_one_slot() {
+    let (_d, mut db) = open_temp();
+    let albums: Vec<(String, String)> = (0..6)
+        .map(|n| entry(&mut db, &format!("Album {n}"), Some("1999"), &["Rock"]))
+        .collect();
+    let choose = |db: &mut Database, ed: &str, slot: Option<i64>| {
+        db.write(|tx| next_up::choose(tx, Some(&new_id()), ed, slot))
+    };
+
+    let rolled = picked(roll(&mut db, &Method::CompletelyRandom));
+    assert_eq!(rolled.album_id, albums[0].0);
+    for (i, (_, ed)) in albums[1..5].iter().enumerate() {
+        let shown = choose(&mut db, ed, None).unwrap();
+        assert_eq!(
+            (shown.slot, shown.source),
+            (i as i64 + 2, SelectionSource::Manual)
+        );
+    }
+    assert_eq!(
+        attempt_status(&db, &rolled.attempt_id),
+        "shown",
+        "adding never replaces"
+    );
+    // An album already picked can't be added twice; a sixth needs a slot to replace.
+    assert_eq!(
+        choose(&mut db, &albums[1].1, None).unwrap_err().code(),
+        "validation"
+    );
+    assert_eq!(
+        choose(&mut db, &albums[5].1, None).unwrap_err().code(),
+        "validation"
+    );
+    let manual = choose(&mut db, &albums[5].1, Some(1)).unwrap();
+    assert_eq!(manual.slot, 1);
+    assert_eq!(attempt_status(&db, &rolled.attempt_id), "skipped");
+    assert_eq!(
+        slot(&db, 1).session.unwrap().session_id,
+        rolled.session_id,
+        "slot 1 keeps its picking method"
+    );
+
+    // Removing slot 3 frees it without touching the others.
+    let third = slot(&db, 3).current.unwrap();
+    assert!(db.write(|tx| next_up::clear(tx, 3)).unwrap());
+    assert_eq!(attempt_status(&db, &third.attempt_id), "skipped");
+    assert_eq!(used(&db), [1, 2, 4, 5]);
+    assert_eq!(
+        db.read(|c| next_up::state(c, YEAR)).unwrap().next_free_slot,
+        Some(3)
+    );
+    assert!(!db.write(|tx| next_up::clear(tx, 3)).unwrap());
+
+    // Listening empties slot 1 but keeps its method; undo puts the pick back there.
+    let logged = db
+        .write(|tx| {
+            listening::log(
+                tx,
+                Some(&new_id()),
+                &LogListen {
+                    edition_id: albums[5].1.clone(),
+                    listened_on: Some("2026-10-01".into()),
+                    kind: ListenKind::First,
+                    earlier_undated: false,
+                    attempt_id: Some(manual.attempt_id.clone()),
+                },
+            )
+        })
+        .unwrap();
+    assert!(logged.completed_next_up);
+    let one = slot(&db, 1);
+    assert!(one.current.is_none());
+    assert_eq!(one.session.unwrap().session_id, rolled.session_id);
+    assert_eq!(slot(&db, 2).current.unwrap().album_id, albums[1].0);
+    db.write(|tx| listening::undo_log(tx, &logged.undo))
+        .unwrap();
+    assert_eq!(slot(&db, 1).current.unwrap().attempt_id, manual.attempt_id);
 }

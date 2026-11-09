@@ -247,6 +247,13 @@ describe("pages and settings", () => {
     expect(updatePreferences).toHaveBeenCalledWith({ sidebarCollapsed: false });
   });
 
+  it("shows the version and storage status in the sidebar", async () => {
+    renderApp("/listen-list");
+    expect(await screen.findByText("Version: 0.1.0")).toBeInTheDocument();
+    expect(screen.getByText("Storage OK · dev")).toBeInTheDocument();
+    expect(screen.queryByText(/schema v/)).not.toBeInTheDocument();
+  });
+
   it("surfaces structured storage errors inline and in a native dialog", async () => {
     vi.mocked(checkHealth).mockRejectedValue(
       new NativeError("schema_too_new", "Database was created by a newer MuDraft"),

@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { FilterBubble } from "../../components/Filters";
 import { PageHeader } from "../../components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "../../components/States";
 import { useLibraryVersion } from "../../services/libraryEvents";
@@ -29,7 +30,6 @@ import {
 import { StatCard } from "./StatCard";
 import "./stats.css";
 
-const LISTEN_ASAP = "00000000-0000-7000-8000-000000000001";
 const TOP = 10;
 const TOP_GENRES = 8;
 
@@ -108,9 +108,129 @@ function groupRows(best: Best, href: (key: string) => string) {
     key: g.key,
     label: g.label,
     value: g.meanStars,
-    display: `${oneDecimal(g.meanStars)} ★ · ${plural(g.albums, "album")}`,
+    display: `${oneDecimal(g.meanStars)} ★ · ${g.tracks === null ? plural(g.albums, "album") : plural(g.tracks, "track")}`,
     href: href(g.key),
   }));
+}
+
+type RankBy = "albums" | "tracks";
+
+/**
+ * "Top rated": the best years, decades, genres, and artists, scored by album ratings or by
+ * individual track ratings. Both come with the stats, so switching never refetches.
+ */
+function TopRated({ s }: { s: CollectionStats }) {
+  const [rankBy, setRankBy] = useState<RankBy>("albums");
+  const labelId = useId();
+  const byTracks = rankBy === "tracks";
+  const r = byTracks ? s.trackRankings : s;
+  const decades = [...r.bestDecade.groups].sort((a, b) => Number(a.key) - Number(b.key));
+  const rankedGenres = r.bestGenre.groups.filter((g) => g.albums >= r.bestGenre.minAlbums);
+  const genres = [...rankedGenres]
+    .sort((a, b) => b.meanStars - a.meanStars || b.albums - a.albums)
+    .slice(0, TOP_GENRES);
+  const min = r.bestYear.minAlbums;
+  return (
+    <>
+      <div className="stats-subhead">
+        <div className="stats-subhead-row">
+          <h3 className="stats-subtitle">Top rated</h3>
+          <div className="filter-group" role="group" aria-labelledby={labelId}>
+            <span id={labelId} className="filter-group-label">
+              Rank by
+            </span>
+            <div className="filter-bubbles">
+              {(["albums", "tracks"] as const).map((v) => (
+                <FilterBubble
+                  key={v}
+                  label={v === "albums" ? "Albums" : "Tracks"}
+                  pressed={rankBy === v}
+                  onToggle={() => {
+                    setRankBy(v);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        <p className="setting-hint">
+          {byTracks ? (
+            <>
+              Rated tracks of Collection albums, averaged track by track, so an album with more
+              rated tracks weighs more. A song on several editions counts once (its ratings
+              averaged); zero is a rating. Tracks count in their album’s original release year and
+              genres, and for the artists credited on the track. Only years, decades, genres, and
+              artists with rated tracks from at least {min} albums are ranked.
+            </>
+          ) : (
+            <>
+              Rated Collection albums only. Each album counts once (its editions’ scores averaged),
+              however often you’ve listened; zero is a rating. Years are original release years.
+              Genres overlap, so an album counts in each of its genres. Only years, decades, genres,
+              and artists with at least {min} rated albums are ranked.
+            </>
+          )}
+        </p>
+      </div>
+      <div className="best-grid">
+        <BestHighlight
+          title="Best release year"
+          best={r.bestYear}
+          byTracks={byTracks}
+          href={(k) => collection(q("year", k))}
+        />
+        <BestHighlight
+          title="Best decade"
+          best={r.bestDecade}
+          byTracks={byTracks}
+          href={(k) => collection(q("decade", k))}
+        />
+        <BestHighlight
+          title="Best genre"
+          best={r.bestGenre}
+          byTracks={byTracks}
+          href={(k) => collection(q("genre", k))}
+        />
+        <BestHighlight
+          title="Best artist"
+          best={r.bestArtist}
+          byTracks={byTracks}
+          href={(k) => collection(q("artist", k))}
+        />
+      </div>
+      <div className="stats-grid">
+        <BarTable
+          caption="Average rating by decade"
+          subtitle={byTracks ? "By rated tracks, out of 5 stars" : "Out of 5 stars"}
+          valueHeading="Average rating"
+          max={5}
+          rows={groupRows({ ...r.bestDecade, groups: decades }, (k) => collection(q("decade", k)))}
+          empty={
+            byTracks
+              ? "No rated tracks on albums with a known year yet."
+              : "No rated albums with a known year yet."
+          }
+        />
+        <BarTable
+          caption="Highest-rated genres"
+          subtitle={`${
+            rankedGenres.length > TOP_GENRES
+              ? `Top ${String(TOP_GENRES)} of ${String(rankedGenres.length)}, out of 5 stars`
+              : "Out of 5 stars"
+          }${byTracks ? ", by rated tracks" : ""}`}
+          valueHeading="Average rating"
+          max={5}
+          ranked
+          rows={groupRows({ ...r.bestGenre, groups: genres }, (k) => collection(q("genre", k)))}
+          empty={
+            byTracks
+              ? `No genre has rated tracks from ${String(min)} albums yet.`
+              : `No genre has ${String(min)} rated albums yet.`
+          }
+        />
+      </div>
+    </>
+  );
 }
 
 function CollectionSection({ s }: { s: CollectionStats }) {
@@ -128,11 +248,6 @@ function CollectionSection({ s }: { s: CollectionStats }) {
   const monthTotal = months.reduce((t, m) => t + m.count, 0);
   const years = continuousYears(s.byYear);
   const buckets = halfStarBuckets(s.ratings.distribution);
-  const decades = [...s.bestDecade.groups].sort((a, b) => Number(a.key) - Number(b.key));
-  const rankedGenres = s.bestGenre.groups.filter((g) => g.albums >= s.bestGenre.minAlbums);
-  const genres = [...rankedGenres]
-    .sort((a, b) => b.meanStars - a.meanStars || b.albums - a.albums)
-    .slice(0, TOP_GENRES);
   return (
     <>
       <div className="stats-hero">
@@ -144,11 +259,6 @@ function CollectionSection({ s }: { s: CollectionStats }) {
             href="/collection"
           />
           <StatCard label="Total listens" value={String(n.dated + n.undated)} />
-          <StatCard
-            label="Albums listened to"
-            value={String(s.distinctListenedAlbums)}
-            href={collection("sort=recently_listened")}
-          />
           <StatCard
             label="Average rating"
             value={<RatingValue stars={s.ratings.averageStars} />}
@@ -206,60 +316,7 @@ function CollectionSection({ s }: { s: CollectionStats }) {
         />
       </div>
 
-      <div className="stats-subhead">
-        <h3 className="stats-subtitle">Top rated</h3>
-        <p className="setting-hint">
-          Rated Collection albums only. Each album counts once (its editions’ scores averaged),
-          however often you’ve listened; zero is a rating. Years are original release years. Genres
-          overlap, so an album counts in each of its genres. Only years, decades, genres, and
-          artists with at least {s.bestYear.minAlbums} rated albums are ranked.
-        </p>
-      </div>
-      <div className="best-grid">
-        <BestHighlight
-          title="Best release year"
-          best={s.bestYear}
-          href={(k) => collection(q("year", k))}
-        />
-        <BestHighlight
-          title="Best decade"
-          best={s.bestDecade}
-          href={(k) => collection(q("decade", k))}
-        />
-        <BestHighlight
-          title="Best genre"
-          best={s.bestGenre}
-          href={(k) => collection(q("genre", k))}
-        />
-        <BestHighlight
-          title="Best artist"
-          best={s.bestArtist}
-          href={(k) => collection(q("artist", k))}
-        />
-      </div>
-      <div className="stats-grid">
-        <BarTable
-          caption="Average rating by decade"
-          subtitle="Out of 5 stars"
-          valueHeading="Average rating"
-          max={5}
-          rows={groupRows({ ...s.bestDecade, groups: decades }, (k) => collection(q("decade", k)))}
-          empty="No rated albums with a known year yet."
-        />
-        <BarTable
-          caption="Highest-rated genres"
-          subtitle={
-            rankedGenres.length > TOP_GENRES
-              ? `Top ${String(TOP_GENRES)} of ${String(rankedGenres.length)}, out of 5 stars`
-              : "Out of 5 stars"
-          }
-          valueHeading="Average rating"
-          max={5}
-          ranked
-          rows={groupRows({ ...s.bestGenre, groups: genres }, (k) => collection(q("genre", k)))}
-          empty={`No genre has ${String(s.bestGenre.minAlbums)} rated albums yet.`}
-        />
-      </div>
+      <TopRated s={s} />
     </>
   );
 }
@@ -281,11 +338,6 @@ function ListenListSection({ s }: { s: ListenListStats }) {
       <ul className="stat-cards" aria-label="Listen List overview">
         <StatCard label="Albums waiting" value={String(s.distinctAlbums)} href="/listen-list" />
         <StatCard label="Artists" value={String(s.distinctArtists)} />
-        <StatCard
-          label="Tagged Listen ASAP"
-          value={String(s.listenAsap)}
-          href={list(q("tag", LISTEN_ASAP))}
-        />
         <StatCard
           label="Longest wait"
           value={plural(s.waiting?.longestDays ?? 0, "day")}

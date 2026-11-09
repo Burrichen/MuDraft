@@ -182,7 +182,7 @@ export function AlbumPage() {
                   makeNextUp.start(listEdition.id, detail.title);
                 }}
               >
-                Make Next Up
+                Add to Next Up
               </Button>
             )}
             <Button
@@ -204,7 +204,7 @@ export function AlbumPage() {
             <Button
               disabledReason={
                 !linked
-                  ? "This album isn’t linked to MusicBrainz."
+                  ? "This album isn’t linked to online metadata."
                   : refreshing
                     ? "Refreshing…"
                     : undefined
@@ -220,16 +220,16 @@ export function AlbumPage() {
                         : "";
                     const retained =
                       out.retainedTracks > 0
-                        ? ` ${String(out.retainedTracks)} rated or listened tracks no longer on MusicBrainz were kept.`
+                        ? ` ${String(out.retainedTracks)} rated or listened tracks no longer listed online were kept.`
                         : "";
-                    return `Refreshed from MusicBrainz.${kept}${retained}`;
+                    return `Details refreshed.${kept}${retained}`;
                   } finally {
                     setRefreshing(false);
                   }
                 })
               }
             >
-              Refresh from MusicBrainz
+              Refresh Details
             </Button>
           </>
         }
@@ -352,8 +352,8 @@ export function AlbumPage() {
                     const genres = await resetAlbumGenres(detail.albumId);
                     if (genres.length > 0) return `Genres reset to ${genres.join(" · ")}.`;
                     return linked
-                      ? "Genres reset. MusicBrainz has no genres MuDraft can use for this album."
-                      : "Genres cleared. This album isn’t linked to MusicBrainz, so there are no defaults.";
+                      ? "Genres reset. The online metadata has no genres MuDraft can use for this album."
+                      : "Genres cleared. This album isn’t linked to online metadata, so there are no defaults.";
                   })
                 }
               >
@@ -392,29 +392,6 @@ export function AlbumPage() {
         </div>
       </div>
 
-      <section className="panel section album-section" aria-labelledby="album-about">
-        <h2 id="album-about" className="section-title">
-          About
-        </h2>
-        {detail.description ? (
-          <>
-            <p className="album-description">{detail.description.text}</p>
-            <p className="setting-hint">
-              {detail.description.source === "musicbrainz"
-                ? "From the MusicBrainz annotation."
-                : "Written by you."}
-            </p>
-          </>
-        ) : (
-          <>
-            <p>{detail.summary}</p>
-            <p className="setting-hint">
-              A summary of facts from your library — no description has been added.
-            </p>
-          </>
-        )}
-      </section>
-
       <ListeningPanel detail={detail} />
 
       <RatingPanel detail={detail} onError={setActionError} />
@@ -426,7 +403,7 @@ export function AlbumPage() {
           </h2>
           <Button
             disabledReason={
-              linked ? undefined : "Editions come from MusicBrainz; this album isn’t linked."
+              linked ? undefined : "Editions come from online metadata; this album isn’t linked."
             }
             onClick={() => {
               setAdding(true);

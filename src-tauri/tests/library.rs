@@ -466,7 +466,7 @@ fn selection_sessions_track_attempts_and_single_current_album() {
     let (ed2, _) = edition(&mut db, &al2, "Standard", 1);
 
     let session = db
-        .write(|tx| selection::start_session(tx, SelectionMode::CompletelyRandom, None))
+        .write(|tx| selection::start_session(tx, 1, SelectionMode::CompletelyRandom, None))
         .unwrap();
     let first = db
         .write(|tx| {
@@ -479,7 +479,11 @@ fn selection_sessions_track_attempts_and_single_current_album() {
         })
         .unwrap();
 
-    let current = db.read(selection::current_selection).unwrap().unwrap();
+    let current = db
+        .read(selection::current_selections)
+        .unwrap()
+        .pop()
+        .unwrap();
     assert_eq!(current.attempt_id, second);
     assert_eq!(current.edition_id, ed2);
     assert_eq!(current.status, AttemptStatus::Shown);
@@ -503,27 +507,32 @@ fn selection_sessions_track_attempts_and_single_current_album() {
     db.write(|tx| selection::record_attempt(tx, &session, &ed1, SelectionSource::CompletelyRandom))
         .unwrap();
 
-    let current = db.read(selection::current_selection).unwrap().unwrap();
+    let current = db
+        .read(selection::current_selections)
+        .unwrap()
+        .pop()
+        .unwrap();
     db.write(|tx| selection::resolve_attempt(tx, &current.attempt_id, AttemptStatus::Completed))
         .unwrap();
     db.write(|tx| selection::resolve_attempt(tx, &current.attempt_id, AttemptStatus::Completed))
         .unwrap();
     assert_eq!(
-        db.read(selection::current_selection)
+        db.read(selection::current_selections)
             .unwrap()
+            .pop()
             .unwrap()
             .status,
         AttemptStatus::Completed
     );
 
     assert_eq!(
-        db.write(|tx| selection::start_session(tx, SelectionMode::Guided, None))
+        db.write(|tx| selection::start_session(tx, 1, SelectionMode::Guided, None))
             .unwrap_err()
             .code(),
         "validation"
     );
     let criteria = GuidedCriteria::default();
-    db.write(|tx| selection::start_session(tx, SelectionMode::Guided, Some(&criteria)))
+    db.write(|tx| selection::start_session(tx, 1, SelectionMode::Guided, Some(&criteria)))
         .unwrap();
 }
 

@@ -18,7 +18,7 @@ export function rowStatus(row: StagedRow): {
     case "needs_lookup":
       return {
         label:
-          row.candidates?.kind === "failed" ? row.candidates.message : "Needs a MusicBrainz lookup",
+          row.candidates?.kind === "failed" ? row.candidates.message : "Needs an online lookup",
         tone: "warn",
       };
     case "ready":

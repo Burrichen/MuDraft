@@ -50,7 +50,7 @@ fn titles(r: &listing::ListResult) -> Vec<String> {
 }
 
 #[test]
-fn exactly_one_protected_builtin_tag_survives_restart_and_imports() {
+fn listen_asap_is_seeded_once_keeps_its_name_and_can_be_deleted_for_good() {
     let (dir, db) = open_temp();
     assert_eq!(db.read(tags::builtin_count).unwrap(), 1);
     drop(db);
@@ -79,17 +79,7 @@ fn exactly_one_protected_builtin_tag_survives_restart_and_imports() {
             .code(),
         "validation"
     );
-    assert_eq!(
-        db.write(|tx| tags::delete(tx, LISTEN_ASAP_TAG_ID))
-            .unwrap_err()
-            .code(),
-        "validation"
-    );
-    // Even raw SQL can't break its identity.
-    assert!(
-        db.write(|tx| Ok(tx.execute("DELETE FROM tag WHERE builtin_key IS NOT NULL", [])?))
-            .is_err()
-    );
+    // Even raw SQL can't rename it.
     assert!(
         db.write(|tx| Ok(tx.execute(
             "UPDATE tag SET name = 'x' WHERE builtin_key IS NOT NULL",
@@ -102,6 +92,17 @@ fn exactly_one_protected_builtin_tag_survives_restart_and_imports() {
         .write(|tx| tags::update(tx, LISTEN_ASAP_TAG_ID, Some("Listen ASAP"), Some("#10B981")))
         .unwrap();
     assert_eq!(recoloured.color, "#10b981");
+
+    // It can be deleted (taking its assignments with it), and stays deleted after a restart.
+    assert_eq!(
+        db.write(|tx| tags::delete(tx, LISTEN_ASAP_TAG_ID)).unwrap(),
+        1
+    );
+    assert_eq!(count(&db, "album_tag"), 0);
+    drop(db);
+    let db = Database::open(&dir.path().join("mudraft.sqlite3")).unwrap();
+    assert_eq!(db.read(tags::builtin_count).unwrap(), 0);
+    assert_eq!(count(&db, "album"), 1, "albums stay");
 }
 
 #[test]
@@ -308,6 +309,31 @@ fn listen_list_shows_album_level_data_and_supports_search_filters_and_sorting() 
         titles(&list(&db, genre_and_tag)),
         vec!["Homogenic"],
         "AND across genres and tags"
+    );
+
+    // Excluding a tag shows every album without it; its facet stays so it can be undone.
+    let not_asap = ListQuery {
+        excluded_tag_ids: vec![LISTEN_ASAP_TAG_ID.into()],
+        ..Default::default()
+    };
+    let without = list(&db, not_asap.clone());
+    assert_eq!(without.items.len(), 2);
+    assert!(
+        without
+            .items
+            .iter()
+            .all(|i| i.tags.iter().all(|t| t.id != LISTEN_ASAP_TAG_ID))
+    );
+    assert!(without.tags.iter().any(|t| t.tag.id == LISTEN_ASAP_TAG_ID));
+    let both = ListQuery {
+        tag_ids: vec![LISTEN_ASAP_TAG_ID.into()],
+        ..not_asap
+    };
+    assert_eq!(
+        db.read(|c| listing::query(c, Source::ListenList, &both))
+            .unwrap_err()
+            .code(),
+        "validation"
     );
 
     let none = list(&db, q("nothing like this"));

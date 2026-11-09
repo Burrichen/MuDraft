@@ -20,6 +20,11 @@ interface Props {
  * Non-modal popover anchored to a button. Moves focus inside on open; Escape, an outside
  * click, or focus leaving closes it and returns focus to the anchor. Positioned in the
  * viewport (fixed) so it is never clipped by cards or small windows.
+ *
+ * macOS WebKit doesn't focus checkboxes or buttons on click; it moves focus to the nearest
+ * focusable ancestor instead. So the popover is itself focusable (focus lands on it, not on
+ * the page behind), and focus moving to an element that contains the popover never counts
+ * as leaving: otherwise the popover would close on mouse-down, before the click arrives.
  */
 export function Popover({ open, onClose, anchorRef, label, children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
@@ -73,7 +78,9 @@ export function Popover({ open, onClose, anchorRef, label, children }: Props) {
     };
     const onFocus = (e: FocusEvent) => {
       const t = e.target as Node;
-      if (!popover?.contains(t) && !anchorRef.current?.contains(t)) onClose();
+      if (!popover) return;
+      const inside = popover.contains(t) || anchorRef.current?.contains(t);
+      if (!inside && !t.contains(popover)) onClose();
     };
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("mousedown", onPointer);
@@ -91,6 +98,7 @@ export function Popover({ open, onClose, anchorRef, label, children }: Props) {
       ref={ref}
       className="popover"
       role="dialog"
+      tabIndex={-1}
       aria-label={label}
       // Transparent (not hidden) while measuring, so focus can move inside immediately.
       style={pos ? { top: pos.top, left: pos.left } : { opacity: 0, top: 0, left: 0 }}

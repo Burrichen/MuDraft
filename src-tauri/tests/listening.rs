@@ -439,7 +439,7 @@ fn completing_a_next_up_pick_links_and_clears_it_without_picking_again() {
     let (_, other_ed, _) = setup(&mut db, "Other", 1);
     let attempt = db
         .write(|tx| {
-            let s = selection::start_session(tx, SelectionMode::CompletelyRandom, None)?;
+            let s = selection::start_session(tx, 1, SelectionMode::CompletelyRandom, None)?;
             selection::record_attempt(tx, &s, &ed, SelectionSource::CompletelyRandom)
         })
         .unwrap();
@@ -464,15 +464,19 @@ fn completing_a_next_up_pick_links_and_clears_it_without_picking_again() {
     );
     assert!(out.completed_next_up);
     assert_eq!(
-        db.read(selection::current_selection).unwrap(),
-        None,
+        db.read(selection::current_selections).unwrap(),
+        vec![],
         "cleared, nothing new picked"
     );
     assert_eq!(count(&db, "selection_attempt"), 1);
     assert!(db.read(|c| listening::history(c, &al)).unwrap().listens[0].from_next_up);
 
     db.write(|tx| listening::undo_log(tx, &out.undo)).unwrap();
-    let back = db.read(selection::current_selection).unwrap().unwrap();
+    let back = db
+        .read(selection::current_selections)
+        .unwrap()
+        .pop()
+        .unwrap();
     assert_eq!(
         (back.attempt_id.as_str(), back.status),
         (attempt.as_str(), selection::AttemptStatus::Shown)

@@ -403,7 +403,7 @@ async fn tracklists_use_one_representative_and_report_partial_coverage() {
         Some(rel(51).as_str())
     );
     assert_eq!(five.reference.track_count, Some(2));
-    assert!(five.reference.note.contains("3 MusicBrainz editions"));
+    assert!(five.reference.note.contains("3 editions listed online"));
     let six = v.entries.iter().find(|e| e.title == "Album 6").unwrap();
     assert_eq!(six.reference.track_count, None, "unknown, not zero");
     assert!(six.tracks.is_none() && six.reference.last_error.is_some());
@@ -1000,4 +1000,119 @@ async fn discovered_albums_are_added_to_the_listen_list_only_on_request() {
         .unwrap();
     assert!(!again.imported);
     assert_eq!(again.edition_id, standard.edition_id);
+}
+
+#[tokio::test(start_paused = true)]
+async fn spoken_word_is_never_stored_and_library_singles_and_live_albums_never_count() {
+    // Groups 1–2 are studio albums; 3 an interview, 4 an audiobook, 5 an audio drama.
+    let f = fixture(|url, _| {
+        if url.contains("/release-group?") {
+            let groups = [
+                group_json(1, "Album", &[], false),
+                group_json(2, "Album", &[], false),
+                group_json(3, "Other", &["Interview"], false),
+                group_json(4, "Other", &["Audiobook"], false),
+                group_json(5, "Album", &["Audio drama"], false),
+            ];
+            Reply::Json(
+                200,
+                format!(
+                    r#"{{"release-group-count": 5, "release-group-offset": 0, "release-groups": [{}]}}"#,
+                    groups.join(",")
+                ),
+            )
+        } else {
+            route(url, 5)
+        }
+    });
+    fetch_catalogue(&f.svc, &f.state, &new_id(), &f.artist)
+        .await
+        .unwrap();
+    let stored: i64 = f
+        .state
+        .with_db(|db| {
+            db.read(|c| Ok(c.query_row("SELECT COUNT(*) FROM catalogue_entry", [], |r| r.get(0))?))
+        })
+        .unwrap();
+    assert_eq!(
+        stored, 2,
+        "interviews, audiobooks, and audio dramas aren't stored"
+    );
+
+    // Library albums the catalogue doesn't list: a single, a live album, a studio album, an
+    // album of unknown type, and an audiobook already in the library.
+    let library = |title: &str, types: Option<(&str, &str)>| {
+        f.state
+            .with_db(|db| {
+                db.write(|tx| {
+                    let id = catalogue::create_album(
+                        tx,
+                        None,
+                        &NewAlbum {
+                            title: title.into(),
+                            original_date: Some("2001".into()),
+                            musicbrainz_release_group_id: None,
+                            credits: vec![CreditInput {
+                                artist_id: f.artist.clone(),
+                                credited_name: None,
+                                join_phrase: None,
+                            }],
+                            genres: vec![],
+                        },
+                    )?;
+                    if let Some((primary, secondary)) = types {
+                        tx.execute(
+                            "UPDATE album SET primary_type = ?2, secondary_types = ?3 WHERE id = ?1",
+                            rusqlite::params![id, primary, secondary],
+                        )?;
+                    }
+                    Ok(id)
+                })
+            })
+            .unwrap()
+    };
+    library("A Single", Some(("Single", "[]")));
+    library("Live at Home", Some(("Album", r#"["Live"]"#)));
+    library("Studio", Some(("Album", "[]")));
+    library("Mystery", None);
+    library("Read Aloud", Some(("Other", r#"["Audiobook"]"#)));
+
+    let v = view(&f);
+    let find = |t: &str| v.entries.iter().find(|e| e.title == t);
+    assert!(find("Album 3").is_none() && find("Album 4").is_none() && find("Album 5").is_none());
+    assert!(
+        find("Read Aloud").is_none(),
+        "spoken-word library albums aren't shown"
+    );
+    let single = find("A Single").unwrap();
+    assert_eq!(single.source, EntrySource::Library);
+    assert_eq!(single.type_label, "Single · in your library");
+    assert!(!single.counted);
+    let live = find("Live at Home").unwrap();
+    assert_eq!(live.type_label, "Album · Live · in your library");
+    assert!(!live.counted);
+    assert!(find("Studio").unwrap().counted);
+    let mystery = find("Mystery").unwrap();
+    assert_eq!(mystery.type_label, "In your library (type unknown)");
+    assert!(mystery.counted, "an unknown type keeps counting, as before");
+    // Two catalogue albums + Studio + Mystery.
+    assert_eq!(v.progress.albums_counted, 4);
+
+    // Spoken-word types can't be chosen for the scope or a manual entry.
+    let err = f
+        .state
+        .with_db(|db| {
+            db.write(|tx| {
+                discography::set_scope(
+                    tx,
+                    &f.artist,
+                    &Scope {
+                        primary_types: vec!["Album".into()],
+                        secondary_types: vec!["Interview".into()],
+                    },
+                )
+            })
+        })
+        .unwrap_err();
+    assert_eq!(err.code(), "validation");
 }

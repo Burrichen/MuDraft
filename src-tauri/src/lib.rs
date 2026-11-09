@@ -29,6 +29,9 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
     builder
         .plugin(tauri_plugin_dialog::init())
+        // In-app updates: signed artifacts from the latest GitHub release (tauri.conf.json).
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let state = init_state(app.handle());
             let metadata =

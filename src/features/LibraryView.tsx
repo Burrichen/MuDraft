@@ -132,6 +132,7 @@ export function LibraryView({
     : "added_newest";
   const genres = params.getAll("genre");
   const tagIds = params.getAll("tag");
+  const notTagIds = params.getAll("notTag");
   const setSort = (next: SortOrder) => {
     updateParams((p) => {
       if (next === "added_newest") p.delete("sort");
@@ -143,9 +144,25 @@ export function LibraryView({
       putList(p, "genre", next);
     });
   };
-  const setTagIds = (next: readonly string[]) => {
+  /** Each click moves a tag on: only albums with it → albums without it → no filter. */
+  const cycleTag = (id: string) => {
     updateParams((p) => {
-      putList(p, "tag", next);
+      if (tagIds.includes(id)) {
+        putList(
+          p,
+          "tag",
+          tagIds.filter((t) => t !== id),
+        );
+        putList(p, "notTag", [...notTagIds, id]);
+      } else if (notTagIds.includes(id)) {
+        putList(
+          p,
+          "notTag",
+          notTagIds.filter((t) => t !== id),
+        );
+      } else {
+        putList(p, "tag", [...tagIds, id]);
+      }
     });
   };
   const numberParam = (key: string) => {
@@ -165,7 +182,7 @@ export function LibraryView({
       p.set("show", String(n));
     });
   };
-  const queryKey = JSON.stringify({ search, sort, genres, tagIds, drill });
+  const queryKey = JSON.stringify({ search, sort, genres, tagIds, notTagIds, drill });
 
   // Write typed (debounced) searches to the URL; clearing writes it directly.
   const writtenSearch = useRef(search);
@@ -200,6 +217,7 @@ export function LibraryView({
       sort: SortOrder;
       genres: string[];
       tagIds: string[];
+      notTagIds: string[];
       drill: typeof drill;
     };
     const d = q.drill;
@@ -208,6 +226,7 @@ export function LibraryView({
       sort: q.sort,
       genres: q.genres,
       tagIds: q.tagIds,
+      excludedTagIds: q.notTagIds,
       ...(d.year !== undefined ? { year: d.year } : {}),
       ...(d.decade !== undefined ? { decade: d.decade } : {}),
       ...(d.yearUnknown ? { yearUnknown: true } : {}),
@@ -261,7 +280,11 @@ export function LibraryView({
     },
   ].filter(Boolean) as { key: string; label: string }[];
   const filtering =
-    search !== "" || genres.length > 0 || tagIds.length > 0 || drillChips.length > 0;
+    search !== "" ||
+    genres.length > 0 ||
+    tagIds.length > 0 ||
+    notTagIds.length > 0 ||
+    drillChips.length > 0;
   const selectedIds = [...selected].filter((id) => byAlbum.has(id));
 
   const assignedFor = (albumIds: readonly string[]) => {
@@ -281,7 +304,17 @@ export function LibraryView({
     writtenSearch.current = "";
     setSearchInput("");
     updateParams((p) => {
-      for (const k of ["q", "genre", "tag", "year", "decade", "yearUnknown", "artist", "show"])
+      for (const k of [
+        "q",
+        "genre",
+        "tag",
+        "notTag",
+        "year",
+        "decade",
+        "yearUnknown",
+        "artist",
+        "show",
+      ])
         p.delete(k);
     });
   };
@@ -356,12 +389,12 @@ export function LibraryView({
                 <Button
                   variant="ghost"
                   className="button-small"
-                  aria-label={`Make ${album.title} Next Up`}
+                  aria-label={`Add ${album.title} to Next Up`}
                   onClick={() => {
                     if (album.editionId) makeNextUp.start(album.editionId, album.title);
                   }}
                 >
-                  Make Next Up
+                  Add to Next Up
                 </Button>
               )}
               <Button
@@ -419,6 +452,8 @@ export function LibraryView({
         genres.length > 0 && `genre: ${genres.join(" or ")}`,
         tagIds.length > 0 &&
           `tag: ${tagIds.map((id) => data?.tags.find((t) => t.id === id)?.name ?? "removed tag").join(" or ")}`,
+        notTagIds.length > 0 &&
+          `not tagged: ${notTagIds.map((id) => data?.tags.find((t) => t.id === id)?.name ?? "removed tag").join(" or ")}`,
       ]
         .filter(Boolean)
         .join(" · ")}
@@ -559,12 +594,16 @@ export function LibraryView({
                     label={t.name}
                     count={t.count}
                     pressed={tagIds.includes(t.id)}
+                    excluded={notTagIds.includes(t.id)}
                     onToggle={() => {
-                      setTagIds(toggle(tagIds, t.id));
+                      cycleTag(t.id);
                     }}
                   />
                 ))}
               </div>
+              <span className="setting-hint">
+                Click a tag again to hide albums that have it (red), and once more to clear it.
+              </span>
             </div>
           )}
           {drillChips.length > 0 && (

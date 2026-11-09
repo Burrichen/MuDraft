@@ -68,7 +68,7 @@ function FetchNote({ fetched }: { fetched: Fetched<unknown> }) {
   const when = new Date(fetched.fetchedAt).toLocaleString();
   return (
     <p className="match-note match-note-warning" role="status">
-      MusicBrainz can’t be reached. Showing results saved on {when}.
+      Can’t search online right now. Showing results saved on {when}.
     </p>
   );
 }
@@ -375,7 +375,7 @@ export function MatchDialog({
                 setMode("search");
               }}
             >
-              Search MusicBrainz
+              Search online
             </button>
             <button
               type="button"
@@ -454,8 +454,8 @@ export function MatchDialog({
 
         {mode === "manual" ? (
           <p className="match-note">
-            The album is added as you typed it, with a new artist entry — it isn’t linked to
-            MusicBrainz or merged with existing artists that share the name.
+            The album is added as you typed it, with a new artist entry — it isn’t linked to online
+            metadata or merged with existing artists that share the name.
           </p>
         ) : (
           <>
@@ -466,7 +466,7 @@ export function MatchDialog({
               {results.kind === "idle" && (
                 <p className="match-muted">Search by title, optionally with artist and year.</p>
               )}
-              {results.kind === "loading" && <LoadingState label="Searching MusicBrainz…" />}
+              {results.kind === "loading" && <LoadingState label="Searching online…" />}
               {results.kind === "error" && (
                 <ErrorState
                   title="Search failed"
@@ -536,7 +536,7 @@ export function MatchDialog({
                   <>
                     <FetchNote fetched={editions.data} />
                     {editionList.length === 0 ? (
-                      <p className="match-muted">MusicBrainz lists no editions for this album.</p>
+                      <p className="match-muted">No editions are listed for this album.</p>
                     ) : (
                       <div
                         className="match-options"
@@ -560,7 +560,7 @@ export function MatchDialog({
                     {editions.data.value.truncated && (
                       <p className="match-muted">
                         Built from the first {editions.data.value.editions.length} of{" "}
-                        {editions.data.value.total} MusicBrainz releases.
+                        {editions.data.value.total} releases.
                       </p>
                     )}
                   </>

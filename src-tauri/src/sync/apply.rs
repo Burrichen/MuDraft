@@ -105,7 +105,7 @@ pub fn apply(
         }
         pending = retry;
     }
-    // Discovered discographies are local caches keyed to artists; drop any left behind.
+    // Discographies belong to artists; drop any left behind by an artist removed here.
     tx.execute(
         "DELETE FROM artist_catalogue WHERE artist_id NOT IN (SELECT id FROM artist)",
         [],

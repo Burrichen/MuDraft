@@ -7,7 +7,7 @@ export function ListenListPage() {
       title="Listen List"
       description="Albums you want to hear."
       emptyTitle="Your Listen List is empty"
-      emptyDescription="Search MusicBrainz, enter an album by hand, or import a CSV to get started."
+      emptyDescription="Search online, enter an album by hand, or import a CSV to get started."
     />
   );
 }

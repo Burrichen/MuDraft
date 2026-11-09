@@ -15,9 +15,10 @@
 //! Synced: the library (artists, albums, editions, tracks, credits, genres), metadata
 //! provenance and manual overrides, tags and assignments, List and Collection membership,
 //! listens (dated and undated), ratings (0 distinct from unrated), reviews, favourite
-//! tracks, Next Up history and current pick, manual catalogue entries, CSV import
-//! fingerprints, portable preferences, and custom/removed artwork. Not synced: downloaded
-//! artwork and other caches, discovered discographies, CSV staging, idempotency keys,
+//! tracks, Next Up history and current pick, artist discographies (fetched and manual
+//! entries, tracklists, exclusions, scope), CSV import fingerprints, portable preferences,
+//! and custom/removed artwork. Not synced: downloaded artwork and other caches, CSV
+//! staging, idempotency keys,
 //! window/route state, the artwork download consent, credentials, and file paths.
 //!
 //! # A sync

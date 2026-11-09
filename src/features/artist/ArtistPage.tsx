@@ -211,7 +211,7 @@ export function ArtistPage() {
         {[
           d.disambiguation,
           d.sortName && d.sortName !== d.artistName ? `Sorted as ${d.sortName}` : null,
-          d.musicbrainzId ? `MusicBrainz ${d.musicbrainzId}` : "Not linked to MusicBrainz",
+          d.musicbrainzId ? "Linked to online metadata" : "Not linked to online metadata",
         ]
           .filter(Boolean)
           .join(" · ")}
@@ -387,7 +387,7 @@ export function ArtistPage() {
           <p className="setting-hint">
             {online
               ? "Nothing else in the counted catalogue — or it hasn’t been fetched yet."
-              : "This artist isn’t linked to MusicBrainz, so nothing can be discovered."}
+              : "This artist isn’t linked to online metadata, so nothing can be discovered."}
           </p>
         )}
       </section>

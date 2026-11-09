@@ -10,6 +10,8 @@ Every MuDraft release is one GitHub Release in the **source** repository, [Burri
 | `MuDraft_<version>_macos_universal.dmg`   | macOS 12+, Apple Silicon and Intel. See `docs/MACOS.md`.                      |
 | `SHA256SUMS.txt`                          | SHA-256 checksums of both files.                                              |
 
+From 1.4.0 the release also carries `latest.json` and `MuDraft_<version>_macos_universal.app.tar.gz`. These are for in-app updates, not for downloading by hand (see below).
+
 - The newest published release is always at <https://github.com/Burrichen/MuDraft/releases/latest>.
 - Once a version is published, its files have stable links: `https://github.com/Burrichen/MuDraft/releases/download/v<version>/<file>`.
 - A _draft_ release is visible only to people with write access to the repository, and its links work only after publishing.
@@ -28,6 +30,19 @@ Signing is optional for this personal project, and each release's notes state ex
 - **Windows, unsigned:** SmartScreen may show "Windows protected your PC". Choose **More info → Run anyway**, but only if the checksum matches.
 - **macOS, ad-hoc signed and not notarized:** approve MuDraft once in System Settings → Privacy & Security → **Open Anyway** (`docs/MACOS.md`). Never disable Gatekeeper globally.
 
+## In-app updates
+
+From 1.4.0, MuDraft checks <https://github.com/Burrichen/MuDraft/releases/latest/download/latest.json> when it starts. **Settings → Version → Check for Updates** checks again. A failed check (offline, GitHub down) stays silent at startup.
+
+When a newer version exists, MuDraft shows its release notes and offers **Update and Restart**:
+
+- **Windows:** it runs that version's setup `.exe` in passive mode.
+- **macOS:** it replaces `MuDraft.app` with the `.app.tar.gz`, then relaunches.
+
+Before installing, the Rust side checks each download against the public key in `src-tauri/tauri.conf.json`. A file that doesn't match is refused. The library is backed up as usual before the new version migrates it. Versions before 1.4.0 have no updater, so install 1.4.0 by hand once.
+
+The private signing key is the GitHub secret `TAURI_SIGNING_PRIVATE_KEY`, with an empty `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Keep an offline backup of it. If it's lost, installed copies can no longer update themselves, and a new key needs one more manual install.
+
 ## Producing a release (maintainers)
 
 The `Release` workflow (`.github/workflows/release.yml`) builds both installers from the **same commit** and puts them in **one draft** release. It never publishes anything.
@@ -44,7 +59,7 @@ The `Release` workflow (`.github/workflows/release.yml`) builds both installers 
    3. runs the live GitHub sync test, if configured (see below);
    4. builds the Windows installer and checks it on a Windows runner with `scripts/windows/verify-install.ps1`, including an upgrade from the latest published release;
    5. builds the universal DMG (`--target universal-apple-darwin`) and checks it with `scripts/macos/verify-install.sh` on an Apple Silicon runner and an Intel runner;
-   6. only if everything passed, creates or updates the draft release `v<version>` with both files and `SHA256SUMS.txt`.
+   6. only if everything passed, creates or updates the draft release `v<version>` with both files, `SHA256SUMS.txt`, and the in-app update files (`latest.json` and the macOS `.app.tar.gz`). The notes in `latest.json` are `docs/release-notes/v<version>.md`, which is what the update prompt shows, so keep that file short.
 
    If any step fails, no draft is created or updated.
 
@@ -55,10 +70,11 @@ Each later version repeats these steps with a higher version number.
 
 ## Optional secrets and variables
 
-Nothing secret is stored in the repository, and every one of these is optional.
+Nothing secret is stored in the repository. `TAURI_SIGNING_PRIVATE_KEY` is **required**: the Windows and macOS build jobs fail without it (see In-app updates). Everything else here is optional.
 
 | Name                                                                        | Kind     | Purpose                                                                                                                                   |
 | --------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`           | secret   | **Required.** Signs the in-app update files (the minisign private key and its password; the password may be empty).                       |
 | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD`                       | secret   | Authenticode-sign the installer (base64 `.pfx` and its password).                                                                         |
 | `WINDOWS_TIMESTAMP_URL`                                                     | variable | Timestamp server (default: DigiCert's public one).                                                                                        |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY` | secret   | Sign with a "Developer ID Application" certificate (base64 `.p12`, its password, and the identity name).                                  |

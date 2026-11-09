@@ -9,8 +9,8 @@ export function ArtworkExplanation() {
     <>
       <p>
         MuDraft can show album covers from the Cover Art Archive (coverartarchive.org, hosted by the
-        Internet Archive). For albums you add, it requests the cover using the album’s MusicBrainz
-        ID. No account or personal details are sent.
+        Internet Archive). For albums you add, it requests the cover using the album’s online ID. No
+        account or personal details are sent.
       </p>
       <p>
         Covers are saved on this computer (each up to 8 MB) so they keep working offline. You can

@@ -196,6 +196,18 @@ fn combine(ts: &TableSchema, l: &Row, r: &Row) -> Row {
     out
 }
 
+/// Both computers fetched different provider data: true when the remote fetch is newer
+/// (its stamps compare greater), with ties broken by content so both sides agree.
+fn newer_fetch(ts: &TableSchema, l: &Row, r: &Row, unit: &[usize]) -> bool {
+    for &s in &ts.fetch_stamps {
+        match cmp_value(&r[s], &l[s]) {
+            Ordering::Equal => continue,
+            o => return o == Ordering::Greater,
+        }
+    }
+    json(&values(r, unit)) > json(&values(l, unit))
+}
+
 fn pick<'a>(side: Side, l: Option<&'a Row>, r: Option<&'a Row>) -> Option<&'a Row> {
     match side {
         Side::Local => l,
@@ -339,6 +351,10 @@ impl Ctx<'_> {
             if !tombstoned {
                 return l.cloned();
             }
+            // Re-fetchable provider data deleted elsewhere: follow the deletion.
+            if l.is_some_and(|row| ts.is_fetched_row(row)) {
+                return None;
+            }
             let (local, remote) = (full(ts, l), Value::Null);
             let id = conflict_id("deletedElsewhere", ts.name, key, "row", &local, &remote);
             return match self.res.get(id.as_str()) {
@@ -361,6 +377,13 @@ impl Ctx<'_> {
             };
         }
         let (Some(lr), Some(rr)) = (l, r) else {
+            // Re-fetchable provider data: one computer refetched it while the other removed
+            // it (e.g. its artist): keep the newer fetch instead of asking.
+            if let Some(present) = l.or(r)
+                && ts.is_fetched_row(present)
+            {
+                return Some(present.clone());
+            }
             let (local, remote) = (full(ts, l), full(ts, r));
             let id = conflict_id("deleteEdit", ts.name, key, "row", &local, &remote);
             return match self.res.get(id.as_str()) {
@@ -392,6 +415,11 @@ impl Ctx<'_> {
                 true
             } else if bv.as_ref() == Some(&rv) {
                 false
+            } else if unit.iter().all(|i| ts.fetched.contains(i))
+                && ts.is_fetched_row(lr)
+                && ts.is_fetched_row(rr)
+            {
+                newer_fetch(ts, lr, rr, unit)
             } else {
                 let (local, remote) = (obj(ts, lr, unit), obj(ts, rr, unit));
                 let part = unit
@@ -915,6 +943,12 @@ const IDENTITIES: &[(&str, &[&str], &[&str])] = &[
     ("recording", &["musicbrainz_recording_id"], &[]),
     ("track", &["musicbrainz_track_id"], &[]),
     ("track", &["edition_id", "disc_number", "position"], &[]),
+    // The same release group discovered for the same artist on two computers.
+    (
+        "catalogue_entry",
+        &["artist_id", "musicbrainz_release_group_id"],
+        &[],
+    ),
 ];
 
 fn find(parent: &mut HashMap<String, String>, id: &str) -> String {
@@ -1101,9 +1135,11 @@ fn remap(schema: &Schema, s: &mut State, table: &str, map: &HashMap<String, Stri
 
 // ---------------------------------------------------------------- finishing
 
-/// At most one open reroll session may exist. If both computers opened one, keep the
-/// session holding the current pick (else the larger ID) and close the others at their
-/// last activity.
+/// Next Up invariants the row merge cannot see. One slot per album: if both computers
+/// picked the same album into different slots, the lowest slot keeps it and the other
+/// slot's pick goes. At most one open reroll session per slot: if both computers opened
+/// one, keep the session holding that slot's current pick (else the larger ID) and close
+/// the others at their last activity.
 fn normalize_next_up(schema: &Schema, m: &mut State) {
     let (Some(sess), Some(att), Some(cur)) = (
         schema.table("selection_session"),
@@ -1112,61 +1148,85 @@ fn normalize_next_up(schema: &Schema, m: &mut State) {
     ) else {
         return;
     };
-    let (Some(s_id), Some(s_mode), Some(s_end), Some(s_start)) = (
+    let (Some(s_id), Some(s_slot), Some(s_mode), Some(s_end), Some(s_start)) = (
         sess.col("id"),
+        sess.col("slot"),
         sess.col("mode"),
         sess.col("ended_at"),
         sess.col("started_at"),
     ) else {
         return;
     };
-    let (Some(a_sess), Some(a_shown), Some(a_resolved)) = (
+    let (Some(a_sess), Some(a_album), Some(a_shown), Some(a_resolved)) = (
         att.col("session_id"),
+        att.col("album_id"),
         att.col("shown_at"),
         att.col("resolved_at"),
     ) else {
         return;
     };
-    let open: Vec<String> = m
-        .rows(sess.name)
-        .iter()
-        .filter(|(_, r)| r[s_end].is_null() && r[s_mode] != "manual")
-        .map(|(k, _)| k.clone())
-        .collect();
-    if open.len() < 2 {
+    let (Some(c_slot), Some(c_attempt)) = (cur.col("slot"), cur.col("attempt_id")) else {
         return;
-    }
-    let current_session = cur.col("attempt_id").and_then(|ci| {
-        let attempt = m.rows(cur.name).values().next()?[ci].clone();
-        let row = m.row(att.name, &json(&[&attempt]))?;
-        Some(row[a_sess].clone())
-    });
-    let keep = open
+    };
+
+    let mut picks: Vec<(Value, String, Value)> = m
+        .rows(cur.name)
         .iter()
-        .find(|k| {
-            current_session
-                .as_ref()
-                .is_some_and(|c| m.row(sess.name, k).is_some_and(|r| &r[s_id] == c))
-        })
-        .or_else(|| open.iter().max())
-        .cloned();
-    for k in open.into_iter().filter(|k| Some(k) != keep.as_ref()) {
-        let Some(id) = m.row(sess.name, &k).map(|r| r[s_id].clone()) else {
+        .map(|(k, r)| (r[c_slot].clone(), k.clone(), r[c_attempt].clone()))
+        .collect();
+    picks.sort_by(|a, b| cmp_value(&a.0, &b.0).then_with(|| a.1.cmp(&b.1)));
+    let mut albums: HashSet<String> = HashSet::new();
+    let mut slot_session: HashMap<String, Value> = HashMap::new();
+    let mut duplicate = Vec::new();
+    for (slot, key, attempt) in picks {
+        let Some(a) = m.row(att.name, &json(&[&attempt])) else {
             continue;
         };
-        let mut end = m
-            .row(sess.name, &k)
-            .map(|r| r[s_start].clone())
-            .unwrap_or(Value::Null);
-        for a in m.rows(att.name).values().filter(|a| a[a_sess] == id) {
-            for v in [&a[a_shown], &a[a_resolved]] {
-                if cmp_value(v, &end) == Ordering::Greater {
-                    end = v.clone();
+        if albums.insert(a[a_album].to_string()) {
+            slot_session.insert(slot.to_string(), a[a_sess].clone());
+        } else {
+            duplicate.push(key);
+        }
+    }
+    for key in duplicate {
+        m.rows_mut(cur.name).remove(&key);
+    }
+
+    let mut open: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (k, r) in m.rows(sess.name) {
+        if r[s_end].is_null() && r[s_mode] != "manual" {
+            open.entry(r[s_slot].to_string())
+                .or_default()
+                .push(k.clone());
+        }
+    }
+    for (slot, keys) in open.into_iter().filter(|(_, k)| k.len() > 1) {
+        let current_session = slot_session.get(&slot);
+        let keep = keys
+            .iter()
+            .find(|k| {
+                current_session.is_some_and(|c| m.row(sess.name, k).is_some_and(|r| &r[s_id] == c))
+            })
+            .or_else(|| keys.iter().max())
+            .cloned();
+        for k in keys.into_iter().filter(|k| Some(k) != keep.as_ref()) {
+            let Some(id) = m.row(sess.name, &k).map(|r| r[s_id].clone()) else {
+                continue;
+            };
+            let mut end = m
+                .row(sess.name, &k)
+                .map(|r| r[s_start].clone())
+                .unwrap_or(Value::Null);
+            for a in m.rows(att.name).values().filter(|a| a[a_sess] == id) {
+                for v in [&a[a_shown], &a[a_resolved]] {
+                    if cmp_value(v, &end) == Ordering::Greater {
+                        end = v.clone();
+                    }
                 }
             }
-        }
-        if let Some(row) = m.rows_mut(sess.name).get_mut(&k) {
-            row[s_end] = end;
+            if let Some(row) = m.rows_mut(sess.name).get_mut(&k) {
+                row[s_end] = end;
+            }
         }
     }
 }
