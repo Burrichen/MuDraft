@@ -15,6 +15,7 @@ export function FilterBubble({
   count,
   icon,
   disabledReason,
+  excluded = false,
 }: {
   label: string;
   pressed: boolean;
@@ -23,6 +24,8 @@ export function FilterBubble({
   icon?: IconName;
   /** Unavailable: stays focusable and shows this reason as visible, linked text. */
   disabledReason?: string | undefined;
+  /** An active "not this" filter: shown in red with ✕, and announced as "Not …". */
+  excluded?: boolean;
 }) {
   const reasonId = useId();
   const unavailable = disabledReason !== undefined;
@@ -30,7 +33,8 @@ export function FilterBubble({
     <button
       type="button"
       className="filter-bubble"
-      aria-pressed={pressed}
+      aria-pressed={pressed || excluded}
+      data-excluded={excluded || undefined}
       aria-disabled={unavailable || undefined}
       aria-describedby={unavailable ? reasonId : undefined}
       onClick={() => {
@@ -38,6 +42,7 @@ export function FilterBubble({
       }}
     >
       {icon && <Icon name={icon} size={16} />}
+      {excluded && <span className="visually-hidden">Not </span>}
       <span className="filter-label">{label}</span>
       {count !== undefined && <span className="filter-count">{count}</span>}
     </button>

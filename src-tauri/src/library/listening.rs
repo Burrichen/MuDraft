@@ -260,7 +260,7 @@ fn soft_delete(tx: &Transaction<'_>, id: &str) -> AppResult<()> {
 
 /// Reverse a log: the listen (and any prior-history note it added) is withdrawn, the
 /// Listen List entry comes back, a Collection entry created only by this log goes away,
-/// and a completed Next Up pick becomes current again if nothing replaced it.
+/// and a completed Next Up pick returns to its slot if nothing replaced it.
 pub fn undo_log(tx: &Transaction<'_>, undo: &UndoLog) -> AppResult<()> {
     let listen_id = parse_uuid("listen", &undo.listen_id)?;
     soft_delete(tx, &listen_id)?;
@@ -303,8 +303,15 @@ pub fn undo_log(tx: &Transaction<'_>, undo: &UndoLog) -> AppResult<()> {
             "UPDATE selection_attempt SET status = 'shown', resolved_at = NULL WHERE id = ?1 AND status = 'completed'",
             params![attempt],
         )?;
+        // Back into its own slot, unless that slot or the album has been picked since.
         tx.execute(
-            "INSERT INTO current_selection (slot, attempt_id) VALUES (1, ?1) ON CONFLICT (slot) DO NOTHING",
+            "INSERT INTO current_selection (slot, attempt_id)
+             SELECT s.slot, a.id FROM selection_attempt a
+             JOIN selection_session s ON s.id = a.session_id
+             WHERE a.id = ?1 AND NOT EXISTS (
+                 SELECT 1 FROM current_selection c JOIN selection_attempt x ON x.id = c.attempt_id
+                 WHERE x.album_id = a.album_id)
+             ON CONFLICT (slot) DO NOTHING",
             params![attempt],
         )?;
     }

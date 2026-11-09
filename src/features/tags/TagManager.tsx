@@ -117,7 +117,7 @@ function TagRow({
         {tag.builtin && (
           <span id={`${nameId}-builtin`} className="setting-hint">
             Built-in tag used by Weighted Random. Its name is fixed; colour and assignments can
-            change.
+            change, and you can delete it.
           </span>
         )}
       </div>
@@ -133,7 +133,6 @@ function TagRow({
         variant="ghost"
         className="button-small"
         aria-label={`Delete tag ${tag.name}`}
-        disabledReason={tag.builtin ? "Built-in tags can’t be deleted." : undefined}
         onClick={onDelete}
       >
         Delete
@@ -279,9 +278,17 @@ export function TagManager() {
           </>
         }
       >
-        {deleting && deleting.albumCount > 0
-          ? `It will be removed from ${String(deleting.albumCount)} album${deleting.albumCount === 1 ? "" : "s"}. The albums themselves stay.`
-          : "It isn’t on any albums."}
+        <p>
+          {deleting && deleting.albumCount > 0
+            ? `It will be removed from ${String(deleting.albumCount)} album${deleting.albumCount === 1 ? "" : "s"}. The albums themselves stay.`
+            : "It isn’t on any albums."}
+        </p>
+        {deleting?.builtin && (
+          <p className="match-note match-note-warning" role="note">
+            Weighted Random in Next Up picks only from albums tagged Listen ASAP, so it won’t be
+            available after this. Deleting it can’t be undone.
+          </p>
+        )}
       </Dialog>
     </section>
   );

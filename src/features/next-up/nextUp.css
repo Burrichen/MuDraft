@@ -76,6 +76,36 @@
   font-weight: var(--weight-medium);
 }
 
+.next-up-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.next-up-slots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.next-up-slot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.next-up-empty-title {
+  margin: 0;
+}
+
 .next-up-hero {
   display: flex;
   flex-wrap: wrap;
@@ -84,8 +114,8 @@
 }
 
 .next-up-card {
-  flex: 0 1 18rem;
-  min-width: min(100%, 14rem);
+  flex: 0 1 14rem;
+  min-width: min(100%, 12rem);
 }
 
 .next-up-details {
@@ -108,4 +138,53 @@
 .next-up-actions a.button {
   color: var(--text);
   text-decoration: none;
+}
+
+/* "Your Next Up is full": choose which slot a manual pick replaces. */
+.next-up-replace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  border: none;
+}
+
+.next-up-replace-option {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.next-up-replace-option:hover {
+  background: var(--surface-hover);
+}
+
+.next-up-replace-option[data-checked="true"] {
+  border-color: var(--accent-indicator);
+  background: var(--surface-raised);
+}
+
+.next-up-replace-option input {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0.125rem 0 0;
+  accent-color: var(--accent);
+}
+
+.next-up-replace-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.next-up-replace-title {
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
 }

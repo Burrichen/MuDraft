@@ -66,7 +66,7 @@ fn mb_ids(
             let rgid: Option<String> = c
                 .query_row("SELECT musicbrainz_release_group_id FROM album WHERE id = ?1", params![album_id], |r| r.get(0))
                 .map_err(|_| AppError::not_found("album", album_id))?;
-            let rgid = rgid.ok_or_else(|| AppError::validation("album", "this album isn’t linked to MusicBrainz"))?;
+            let rgid = rgid.ok_or_else(|| AppError::validation("album", "this album isn’t linked to online metadata"))?;
             let release = match edition_id {
                 Some(e) => c
                     .query_row(
@@ -96,10 +96,7 @@ pub async fn album_refresh(
     let edition_id = parse_uuid("edition", &edition_id)?;
     let (rgid, release) = mb_ids(&state, &album_id, Some(&edition_id))?;
     let release = release.ok_or_else(|| {
-        AppError::validation(
-            "edition",
-            "this edition isn’t linked to a MusicBrainz release",
-        )
+        AppError::validation("edition", "this edition isn’t linked to an online release")
     })?;
     let guard = service.requests().begin(&request_id)?;
     let group = service

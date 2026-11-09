@@ -6,8 +6,9 @@ MuDraft can keep your library the same on two or more computers, such as a Mac a
 
 ## What syncs
 
-- **Synced:** albums, editions and tracks, your metadata edits, the Listen List and Collection, listens (dated and undated, including deletions), ratings (a 0-star rating stays different from "unrated"), reviews, liked tracks, tags, Next Up history and the current album, manual catalogue entries, your own artwork (and artwork you removed), and display preferences.
-- **Not synced:** downloaded cover art (each computer downloads its own), cached MusicBrainz results, discovered discographies, the window and sidebar state, the artwork download setting, your GitHub token, and file paths.
+- **Synced:** albums, editions and tracks, your metadata edits, the Listen List and Collection, listens (dated and undated, including deletions), ratings (a 0-star rating stays different from "unrated"), reviews, liked tracks, tags, Next Up history and each slot’s current album, artist discographies (fetched albums and tracklists, your manual entries, exclusions, and which album types count), your own artwork (and artwork you removed), and display preferences.
+- **Discographies:** a discography fetched on one computer appears on the others, so artist progress matches everywhere without fetching again. Refreshing still works as before. If two computers fetch the same artist, the albums merge into one list and the newer fetch wins; only your own choices (excluded albums, album types counted) can ever need resolving.
+- **Not synced:** downloaded cover art (each computer downloads its own), cached MusicBrainz results, the window and sidebar state, the artwork download setting, your GitHub token, and file paths.
 
 ## 1. Create the repository (once)
 

@@ -180,7 +180,7 @@ describe("CSV import page", () => {
     renderApp("/listen-list/import");
     const importButton = await screen.findByRole("button", { name: /Import 2 rows/ });
     expect(importButton).toHaveAccessibleDescription(
-      /2 rows need a MusicBrainz lookup or an edition choice/,
+      /2 rows need an online lookup or an edition choice/,
     );
   });
 
@@ -191,7 +191,7 @@ describe("CSV import page", () => {
       .mockResolvedValueOnce({
         processed: 0,
         remaining: 5,
-        stopped: { code: "offline", message: "Can't reach MusicBrainz" },
+        stopped: { code: "offline", message: "Can't reach the online album database" },
       });
     renderApp("/listen-list/import");
     await userEvent.click(await screen.findByRole("button", { name: "Look up 2 rows" }));
@@ -225,7 +225,7 @@ describe("CSV import page", () => {
     renderApp("/listen-list/import");
     await userEvent.click(await screen.findByRole("button", { name: "Look up 2 rows" }));
     const importButton = screen.getByRole("button", { name: /Import 2 rows/ });
-    expect(importButton).toHaveAccessibleDescription("Pause the MusicBrainz lookups first.");
+    expect(importButton).toHaveAccessibleDescription("Pause the online lookups first.");
     await userEvent.click(screen.getByRole("button", { name: "Pause lookups" }));
     expect(signal?.aborted).toBe(true);
     expect(await screen.findByText(/Lookups paused\. Resume any time/)).toBeInTheDocument();

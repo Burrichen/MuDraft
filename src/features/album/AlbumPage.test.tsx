@@ -180,7 +180,7 @@ beforeEach(() => {
 });
 
 describe("Album page", () => {
-  it("shows credits, badges, genres, tags, sourced description, and the chosen edition", async () => {
+  it("shows credits, badges, genres, tags, and the chosen edition, with no About section", async () => {
     renderApp(`/albums/${ALBUM}?edition=${DLX}`);
     expect(
       await screen.findByRole("heading", { level: 1, name: "OK Computer" }),
@@ -196,8 +196,8 @@ describe("Album page", () => {
     expect(screen.getByRole("list", { name: "Tags on OK Computer" })).toHaveTextContent(
       "Listen ASAP",
     );
-    expect(screen.getByText("Third studio album.")).toBeInTheDocument();
-    expect(screen.getByText("From the MusicBrainz annotation.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "About" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Third studio album.")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Tracklist · Deluxe" })).toBeInTheDocument();
   });
 
@@ -215,14 +215,11 @@ describe("Album page", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("works without artwork or description, using a factual summary", async () => {
+  it("works without artwork or description", async () => {
     vi.mocked(albumDetail).mockResolvedValue(detail({ description: null }));
     renderApp(`/albums/${ALBUM}`);
-    expect(
-      await screen.findByText("“OK Computer” by Radiohead, first released 1997-05-21."),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/A summary of facts from your library/)).toBeInTheDocument();
-    expect(screen.getByText("No artwork.")).toBeInTheDocument();
+    expect(await screen.findByText("No artwork.")).toBeInTheDocument();
+    expect(screen.queryByText(/A summary of facts from your library/)).not.toBeInTheDocument();
     expect(screen.getByTestId("artwork-placeholder")).toBeInTheDocument();
     await waitFor(() => {
       expect(artworkPreference).toHaveBeenCalled();
@@ -258,8 +255,8 @@ describe("Album page", () => {
     expect(removeArtwork).toHaveBeenCalledWith(DLX);
   });
 
-  it("edits only changed fields and can hand a field back to MusicBrainz", async () => {
-    vi.mocked(albumDetail).mockResolvedValue(detail({ lockedFields: ["description"] }));
+  it("edits only changed fields and can hand a field back to the online metadata", async () => {
+    vi.mocked(albumDetail).mockResolvedValue(detail({ lockedFields: ["original_date"] }));
     renderApp(`/albums/${ALBUM}`);
     await userEvent.click(await screen.findByRole("button", { name: "Edit details" }));
     const dialog = screen.getByRole("dialog", { name: "Edit album details" });
@@ -267,9 +264,10 @@ describe("Album page", () => {
     await userEvent.clear(title);
     await userEvent.type(title, "OK Computer (mine)");
     await userEvent.click(
-      within(dialog).getByRole("button", { name: "Let MusicBrainz update description again" }),
+      within(dialog).getByRole("button", { name: "Update original release date on refresh again" }),
     );
-    expect(unlockField).toHaveBeenCalledWith(ALBUM, "description");
+    expect(within(dialog).queryByLabelText("Description")).not.toBeInTheDocument();
+    expect(unlockField).toHaveBeenCalledWith(ALBUM, "original_date");
     await userEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(editAlbum).toHaveBeenCalledWith(ALBUM, { title: "OK Computer (mine)" });
   });
@@ -404,7 +402,7 @@ describe("Album page", () => {
     );
   });
 
-  it("refreshes from MusicBrainz and reports kept edits", async () => {
+  it("refreshes details and reports kept edits", async () => {
     vi.mocked(refreshAlbum).mockResolvedValue({
       albumId: ALBUM,
       editionId: DLX,
@@ -415,9 +413,9 @@ describe("Album page", () => {
       genres: [],
     });
     renderApp(`/albums/${ALBUM}`);
-    await userEvent.click(await screen.findByRole("button", { name: "Refresh from MusicBrainz" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Refresh Details" }));
     expect(refreshAlbum).toHaveBeenCalledWith(ALBUM, DLX);
-    expect(await screen.findByText(/Refreshed from MusicBrainz\./)).toHaveTextContent(
+    expect(await screen.findByText(/Details refreshed\./)).toHaveTextContent(
       "Your edits were kept (album.title). 1 rated or listened tracks",
     );
   });

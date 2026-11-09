@@ -31,6 +31,8 @@ fn credit() -> CreditPart {
 
 fn group(annotation: Option<&str>) -> ReleaseGroupDetail {
     ReleaseGroupDetail {
+        primary_type: Some("Album".into()),
+        secondary_types: Some(vec![]),
         id: RG.into(),
         title: "OK Computer".into(),
         disambiguation: None,

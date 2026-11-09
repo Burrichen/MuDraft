@@ -48,7 +48,7 @@ pub enum SortOrder {
 }
 
 /// Search and filters. Within genres (or tags) any selected value matches; genres and
-/// tags combine with AND.
+/// tags combine with AND. Albums with any excluded tag are left out.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields, default)]
 pub struct ListQuery {
@@ -56,6 +56,8 @@ pub struct ListQuery {
     pub sort: SortOrder,
     pub genres: Vec<String>,
     pub tag_ids: Vec<String>,
+    /// Albums with any of these tags are left out ("not tagged").
+    pub excluded_tag_ids: Vec<String>,
     /// Drill-downs (e.g. from Stats), all on the canonical album's original year.
     pub year: Option<i64>,
     /// First year of a decade, e.g. 1990.
@@ -312,6 +314,17 @@ pub fn query(conn: &Connection, source: Source, q: &ListQuery) -> AppResult<List
         .iter()
         .map(|t| parse_uuid("tag", t))
         .collect::<AppResult<_>>()?;
+    let banned_tags: Vec<String> = q
+        .excluded_tag_ids
+        .iter()
+        .map(|t| parse_uuid("tag", t))
+        .collect::<AppResult<_>>()?;
+    if wanted_tags.iter().any(|t| banned_tags.contains(t)) {
+        return Err(AppError::validation(
+            "tags",
+            "a tag can't be both required and excluded",
+        ));
+    }
 
     if let Some(d) = q.decade
         && d.rem_euclid(10) != 0
@@ -350,6 +363,7 @@ pub fn query(conn: &Connection, source: Source, q: &ListQuery) -> AppResult<List
             wanted_genres.is_empty() || i.genres.iter().any(|g| wanted_genres.contains(&norm(g)))
         })
         .filter(|i| wanted_tags.is_empty() || i.tags.iter().any(|t| wanted_tags.contains(&t.id)))
+        .filter(|i| !i.tags.iter().any(|t| banned_tags.contains(&t.id)))
         .collect();
 
     let title_then_added = |a: &ListItem, b: &ListItem| {

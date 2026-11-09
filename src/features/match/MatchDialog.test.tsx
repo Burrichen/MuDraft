@@ -145,7 +145,7 @@ describe("MatchDialog", () => {
     setup();
     await search();
     expect(
-      await screen.findByText(/MusicBrainz can’t be reached\. Showing results saved on/),
+      await screen.findByText(/Can’t search online right now\. Showing results saved on/),
     ).toBeInTheDocument();
   });
 
@@ -154,14 +154,14 @@ describe("MatchDialog", () => {
       .mockRejectedValueOnce(
         new NativeError(
           "rate_limited",
-          "MusicBrainz is limiting requests right now; try again shortly",
+          "Too many requests to the online album database right now; try again shortly",
         ),
       )
       .mockResolvedValueOnce(fetched(SEARCH));
     setup();
     await search();
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("limiting requests");
+    expect(alert).toHaveTextContent("Too many requests");
     expect(alert).toHaveTextContent("rate_limited");
     await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("radiogroup", { name: "Album" })).toBeInTheDocument();
@@ -229,7 +229,7 @@ describe("MatchDialog", () => {
       kind: "manual",
       album: { title: "Basement Demo", artistName: "Local Band", year: 2003 },
     });
-    expect(screen.getByText(/isn’t linked to MusicBrainz or merged/)).toBeInTheDocument();
+    expect(screen.getByText(/isn’t linked to online metadata or merged/)).toBeInTheDocument();
   });
 
   it("keeps the dialog open and explains save failures such as name collisions", async () => {

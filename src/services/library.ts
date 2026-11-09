@@ -22,6 +22,8 @@ export interface ListQuery {
   sort: SortOrder;
   genres: string[];
   tagIds: string[];
+  /** Albums with any of these tags are left out. */
+  excludedTagIds?: string[];
   /** Drill-downs on the canonical album's original year and credits. */
   year?: number;
   decade?: number;
@@ -92,6 +94,7 @@ export async function listLibrary(source: LibrarySource, query: ListQuery): Prom
       sort: query.sort,
       genres: query.genres,
       tagIds: query.tagIds,
+      excludedTagIds: query.excludedTagIds ?? [],
       year: query.year ?? null,
       decade: query.decade ?? null,
       yearUnknown: query.yearUnknown ?? false,

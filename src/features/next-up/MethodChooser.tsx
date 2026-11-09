@@ -162,6 +162,8 @@ export function MethodChooser({
       : {}),
   }));
 
+  // Weighted Random only picks Listen ASAP albums; with the tag deleted there are none.
+  const noAsapTag = options !== null && !options.listenAsapTag;
   const matchCount = options?.matchCount ?? null;
   const findReason = busy
     ? "Picking…"
@@ -214,15 +216,16 @@ export function MethodChooser({
           className="method-card"
           aria-label={METHOD_LABEL.weighted_random}
           aria-describedby={ids.weighted}
-          aria-disabled={busy || undefined}
+          aria-disabled={busy || noAsapTag || undefined}
           onClick={() => {
-            if (!busy) onRoll({ mode: "weighted_random" });
+            if (!busy && !noAsapTag) onRoll({ mode: "weighted_random" });
           }}
         >
           <span className="method-title">{METHOD_LABEL.weighted_random}</span>
           <span id={ids.weighted} className="method-hint">
-            Only albums tagged Listen ASAP
-            {options ? ` · ${plural(options.listenAsap)}` : ""}
+            {noAsapTag
+              ? "Unavailable: you deleted the Listen ASAP tag it picks from"
+              : `Only albums tagged Listen ASAP${options ? ` · ${plural(options.listenAsap)}` : ""}`}
           </span>
         </button>
       </div>

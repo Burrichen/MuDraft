@@ -104,7 +104,7 @@ pub fn commit(
         return Err(AppError::validation(
             "import",
             format!(
-                "rows {} need a MusicBrainz lookup or an edition choice. Look them up, keep them as manual entries, or skip them",
+                "rows {} need an online lookup or an edition choice. Look them up, keep them as manual entries, or skip them",
                 list(&blocked)
             ),
         ));

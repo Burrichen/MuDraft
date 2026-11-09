@@ -200,7 +200,14 @@ describe("Settings", () => {
 
   it("shows the app version, storage location, and data sources", async () => {
     renderApp("/settings");
-    expect(await screen.findByText("MuDraft 0.1.0 · SQLite 3.53.2")).toBeInTheDocument();
+    const version = await screen.findByRole("region", { name: "Version" });
+    expect(await within(version).findByText("MuDraft 0.1.0")).toBeInTheDocument();
+    // Test builds are development builds: no updating from here.
+    expect(within(version).getByRole("button", { name: "Check for Updates" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    expect(screen.getByText("3.53.2")).toBeInTheDocument();
     expect(screen.getByText(/app\.mudraft\.desktop\.dev/)).toBeInTheDocument();
     const sources = screen.getByRole("region", { name: "Data sources" });
     expect(sources).toHaveTextContent("MusicBrainz");

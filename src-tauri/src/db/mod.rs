@@ -21,6 +21,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!("migrations/0011_asap_mustard.sql"),
     include_str!("migrations/0012_sync.sql"),
     include_str!("migrations/0013_listen_list_progress.sql"),
+    include_str!("migrations/0014_next_up_slots.sql"),
+    include_str!("migrations/0015_deletable_listen_asap.sql"),
+    include_str!("migrations/0016_release_types.sql"),
 ];
 
 pub const SCHEMA_VERSION: i64 = MIGRATIONS.len() as i64;
@@ -270,6 +273,139 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM selection_attempt", [], |r| r.get(0))
             .unwrap();
         assert_eq!(attempts, 0, "cascade from the rebuilt parent still works");
+    }
+
+    #[test]
+    fn v16_backfills_album_types_and_drops_spoken_word_catalogue_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v15.sqlite3");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for (i, sql) in MIGRATIONS.iter().take(15).enumerate() {
+                conn.execute_batch(sql).unwrap();
+                conn.pragma_update(None, "user_version", i as i64 + 1)
+                    .unwrap();
+            }
+            conn.execute_batch(
+                r#"INSERT INTO artist (id, name) VALUES ('ar', 'Artist');
+                 INSERT INTO album (id, title, musicbrainz_release_group_id) VALUES
+                     ('from-catalogue', 'Single', 'rg-1'),
+                     ('from-cache', 'Live', 'rg-2'),
+                     ('unknown', 'Unknown', 'rg-3'),
+                     ('manual', 'Manual', NULL);
+                 INSERT INTO catalogue_entry (id, artist_id, source, musicbrainz_release_group_id,
+                     title, primary_type, secondary_types) VALUES
+                     ('c1', 'ar', 'musicbrainz', 'rg-1', 'Single', 'Single', '[]'),
+                     ('c2', 'ar', 'musicbrainz', 'rg-9', 'Talk', 'Other', '["Interview"]'),
+                     ('c3', 'ar', 'musicbrainz', 'rg-8', 'Book', 'Other', '["Audiobook"]');
+                 INSERT INTO catalogue_entry (id, artist_id, source, title, secondary_types)
+                     VALUES ('c4', 'ar', 'manual', 'Mine', '["Audio drama"]');
+                 INSERT INTO metadata_cache (key, body, fetched_at, expires_at) VALUES
+                     ('https://musicbrainz.org/ws/2/release-group/rg-2?inc=x&fmt=json',
+                      '{"id": "rg-2", "primary-type": "Album", "secondary-types": ["Live"]}', 't', 't'),
+                     ('https://musicbrainz.org/ws/2/release-group/rg-3?inc=x&fmt=json', 'not json', 't', 't');"#,
+            )
+            .unwrap();
+        }
+        let db = Database::open(&path).unwrap();
+        let types = |id: &str| -> (Option<String>, Option<String>) {
+            db.conn
+                .query_row(
+                    "SELECT primary_type, secondary_types FROM album WHERE id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap()
+        };
+        assert_eq!(
+            types("from-catalogue"),
+            (Some("Single".into()), Some("[]".into()))
+        );
+        assert_eq!(
+            types("from-cache"),
+            (Some("Album".into()), Some(r#"["Live"]"#.into()))
+        );
+        assert_eq!(
+            types("unknown"),
+            (None, None),
+            "unreadable cache is ignored"
+        );
+        assert_eq!(types("manual"), (None, None));
+        let left: Vec<String> = db
+            .conn
+            .prepare("SELECT id FROM catalogue_entry ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            left,
+            ["c1", "c4"],
+            "fetched spoken-word entries go; manual ones stay"
+        );
+    }
+
+    #[test]
+    fn v14_moves_the_open_session_and_current_pick_into_slot_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v13.sqlite3");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for (i, sql) in MIGRATIONS.iter().take(13).enumerate() {
+                conn.execute_batch(sql).unwrap();
+                conn.pragma_update(None, "user_version", i as i64 + 1)
+                    .unwrap();
+            }
+            conn.execute_batch(
+                "INSERT INTO album (id, title) VALUES ('al', 'A');
+                 INSERT INTO edition (id, album_id, name) VALUES ('ed', 'al', 'Standard');
+                 INSERT INTO selection_session (id, mode, ended_at) VALUES ('old', 'guided', 'x');
+                 INSERT INTO selection_session (id, mode) VALUES ('open', 'completely_random');
+                 INSERT INTO selection_attempt (id, session_id, sequence, album_id, edition_id, source)
+                     VALUES ('at', 'open', 1, 'al', 'ed', 'completely_random');
+                 INSERT INTO current_selection (slot, attempt_id, set_at) VALUES (1, 'at', 'then');",
+            )
+            .unwrap();
+        }
+        let db = Database::open(&path).unwrap();
+        let c = &db.conn;
+        let slots: Vec<(String, i64)> = c
+            .prepare("SELECT id, slot FROM selection_session ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(slots, [("old".into(), 1), ("open".into(), 1)]);
+        let current: (i64, String, String) = c
+            .query_row(
+                "SELECT slot, attempt_id, set_at FROM current_selection",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(current, (1, "at".into(), "then".into()));
+        // Five slots, each with at most one open reroll session.
+        c.execute_batch(
+            "INSERT INTO selection_session (id, slot, mode) VALUES ('s5', 5, 'weighted_random');
+             INSERT INTO selection_attempt (id, session_id, sequence, album_id, edition_id, source)
+                 VALUES ('a5', 's5', 1, 'al', 'ed', 'weighted_random');
+             INSERT INTO current_selection (slot, attempt_id) VALUES (5, 'a5');",
+        )
+        .unwrap();
+        for bad in [
+            "INSERT INTO selection_session (id, slot, mode) VALUES ('s6', 6, 'completely_random')",
+            "INSERT INTO selection_session (id, slot, mode) VALUES ('dup', 5, 'completely_random')",
+            "INSERT INTO current_selection (slot, attempt_id) VALUES (0, 'at')",
+        ] {
+            assert!(c.execute(bad, []).is_err(), "{bad}");
+        }
+        c.execute(
+            "INSERT INTO selection_session (id, slot, mode) VALUES ('m', 5, 'manual')",
+            [],
+        )
+        .unwrap();
     }
 
     #[test]

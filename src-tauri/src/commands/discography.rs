@@ -65,7 +65,7 @@ pub async fn fetch_catalogue(
         .ok_or_else(|| {
             AppError::validation(
                 "artist",
-                "this artist isn't linked to MusicBrainz, so there is no online catalogue to fetch",
+                "this artist isn't linked to online metadata, so there is no online catalogue to fetch",
             )
         })?;
     let guard = svc.requests().begin(request_id)?;
@@ -144,7 +144,7 @@ pub async fn load_tracklists(
             })?;
             let Some(release_id) = chosen else {
                 return Err(AppError::Provider(
-                    "MusicBrainz lists no release with a tracklist for this album".into(),
+                    "No release with a tracklist is listed for this album".into(),
                 ));
             };
             let release = svc.provider().release(&release_id, &guard.token).await?;
@@ -237,7 +237,7 @@ pub async fn add_to_listen_list(
                     })?
                     .ok_or_else(|| {
                         AppError::Provider(
-                            "MusicBrainz lists no release with a tracklist for this album".into(),
+                            "No release with a tracklist is listed for this album".into(),
                         )
                     })?
             }

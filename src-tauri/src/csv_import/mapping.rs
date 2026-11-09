@@ -229,7 +229,7 @@ pub fn normalize_row(
         cell(i).and_then(|raw| match parse_uuid("id", raw) {
             Ok(id) => Some(id),
             Err(_) => {
-                issues.push(issue(name, format!("“{raw}” isn’t a MusicBrainz ID")));
+                issues.push(issue(name, format!("“{raw}” isn’t a valid release ID")));
                 None
             }
         })

@@ -18,11 +18,12 @@ use super::{
     BoxFuture, CatalogueReleaseGroup, CreditPart, EditionCandidate, EditionList, FetchSource,
     Fetched, MetadataProvider, ProviderDate, ReleaseDetail, ReleaseGroupCandidate,
     ReleaseGroupDetail, ReleaseGroupPage, SearchPage, SearchQuery, SourceTag, TrackDetail,
+    unsupported_release_type,
 };
 use crate::domain::ids::parse_uuid;
 use crate::error::{AppError, AppResult};
 
-const SERVICE: &str = "MusicBrainz";
+const SERVICE: &str = "the online album database";
 pub const BASE_URL: &str = "https://musicbrainz.org/ws/2/";
 const SEARCH_LIMIT: u32 = 25;
 const MAX_SEARCH_OFFSET: u32 = 10_000;
@@ -129,7 +130,7 @@ impl MusicBrainz {
                     });
                 }
                 Ok(r) if r.status == 404 => {
-                    return Err(AppError::not_found("MusicBrainz entry", key));
+                    return Err(AppError::not_found("online entry", key));
                 }
                 Ok(r) if r.status == 503 || r.status == 429 => {
                     last_error = AppError::RateLimited(SERVICE.into());
@@ -209,6 +210,8 @@ impl MusicBrainz {
         let mut candidates: Vec<ReleaseGroupCandidate> = raw
             .release_groups
             .into_iter()
+            // Interviews, audiobooks, and audio dramas are never offered.
+            .filter(|rg| !unsupported_release_type(&rg.secondary_types))
             .filter_map(|rg| {
                 let id = parse_uuid("release group", &rg.id).ok()?;
                 let original_date = ProviderDate::parse(rg.first_release_date.as_deref());
@@ -308,6 +311,8 @@ impl MusicBrainz {
             title: rg.title,
             disambiguation: non_empty(rg.disambiguation),
             annotation: non_empty(rg.annotation),
+            primary_type: non_empty(rg.primary_type),
+            secondary_types: Some(rg.secondary_types),
             original_date: ProviderDate::parse(rg.first_release_date.as_deref()),
             artist_credit: credits(rg.artist_credit),
             genres: tags(rg.genres),

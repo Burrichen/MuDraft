@@ -56,11 +56,6 @@
   margin-bottom: var(--space-4);
 }
 
-.album-description {
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-}
-
 .album-textarea {
   min-height: 7rem;
   padding: var(--space-2) var(--space-3);

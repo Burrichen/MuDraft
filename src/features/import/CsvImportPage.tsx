@@ -160,8 +160,8 @@ export function CsvImportPage() {
             Choose a file
           </h2>
           <p className="setting-hint">
-            You’ll see every row before anything is added. Importing works offline; MusicBrainz
-            lookups are optional.
+            You’ll see every row before anything is added. Importing works offline; online lookups
+            are optional.
           </p>
           <div className="page-actions">
             <Button

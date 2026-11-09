@@ -14,7 +14,9 @@ import {
   type GuidedCriteria,
   type GuidedOptions,
   type Method,
+  type NextUpSlot,
   type NextUpState,
+  type PoolView,
 } from "../../services/nextUp";
 import { renderApp } from "../../test/renderApp";
 import { explainMatch, fromMethod, toCriteria } from "./criteria";
@@ -114,6 +116,7 @@ const GUIDED: Method = {
 function pick(over: Partial<CurrentPick> = {}): CurrentPick {
   const it = item();
   return {
+    slot: 1,
     attemptId: "0190f5c3-0000-7000-8000-0000000a7701",
     sessionId: "0190f5c3-0000-7000-8000-0000000a5501",
     albumId: it.albumId,
@@ -128,18 +131,64 @@ function pick(over: Partial<CurrentPick> = {}): CurrentPick {
   };
 }
 
-const NOTHING: NextUpState = { current: null, session: null };
-const WITH_PICK: NextUpState = {
-  current: pick(),
-  session: {
-    sessionId: "s",
-    method: GUIDED,
-    poolCycle: 1,
-    poolSize: 3,
-    remaining: 2,
-    exhausted: false,
-  },
+const POOL: PoolView = {
+  sessionId: "s",
+  method: GUIDED,
+  poolCycle: 1,
+  poolSize: 3,
+  remaining: 2,
+  exhausted: false,
 };
+
+function state(slots: NextUpSlot[]): NextUpState {
+  const used = slots.map((s) => s.slot);
+  return {
+    slots,
+    maxSlots: 5,
+    nextFreeSlot: [1, 2, 3, 4, 5].find((n) => !used.includes(n)) ?? null,
+  };
+}
+
+const NOTHING = state([]);
+const WITH_PICK = state([{ slot: 1, current: pick(), session: POOL }]);
+
+/** A second slot: picked by hand (no method), a different album. */
+const SECOND: NextUpSlot = {
+  slot: 2,
+  current: pick({
+    slot: 2,
+    attemptId: "0190f5c3-0000-7000-8000-0000000a7702",
+    sessionId: "manual",
+    albumId: "0190f5c3-0000-7000-8000-0000000000a3",
+    editionId: "0190f5c3-0000-7000-8000-0000000000e3",
+    source: "manual",
+    matched: { method: null, years: [], genres: [], tags: [] },
+    item: item({
+      albumId: "0190f5c3-0000-7000-8000-0000000000a3",
+      editionId: "0190f5c3-0000-7000-8000-0000000000e3",
+      title: "Bitches Brew",
+    }),
+  }),
+  session: null,
+};
+
+const FULL = state(
+  [1, 2, 3, 4, 5].map((n) => ({
+    slot: n,
+    current: pick({
+      slot: n,
+      attemptId: `0190f5c3-0000-7000-8000-0000000a770${String(n)}`,
+      editionId: `0190f5c3-0000-7000-8000-0000000000f${String(n)}`,
+      item: item({
+        editionId: `0190f5c3-0000-7000-8000-0000000000f${String(n)}`,
+        title: `Album ${String(n)}`,
+      }),
+    }),
+    session: POOL,
+  })),
+);
+
+const slotCard = (name: string) => screen.getByRole("article", { name });
 
 function options(criteria: GuidedCriteria | undefined): GuidedOptions {
   const genres = criteria?.genres;
@@ -179,6 +228,7 @@ function options(criteria: GuidedCriteria | undefined): GuidedOptions {
     // Jazz + a decade: an explicit zero-match state.
     matchCount: jazzOnly && criteria?.years !== "agnostic" ? 0 : 4,
     listenAsap: 2,
+    listenAsapTag: true,
     total: 5,
   };
 }
@@ -193,6 +243,7 @@ beforeEach(() => {
     return Promise.resolve({
       kind: "picked",
       shown: {
+        slot: 1,
         attemptId: "a",
         sessionId: "s",
         albumId: "x",
@@ -239,11 +290,11 @@ describe("Next Up page", () => {
       "Any album on your Listen List · 5 albums",
     );
     await user.click(screen.getByRole("button", { name: "Completely Random" }));
-    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), { mode: "completely_random" });
+    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), 1, { mode: "completely_random" });
     expect(await screen.findByRole("heading", { name: "Your Next Up" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Kind of Blue" })).toBeInTheDocument();
     expect(screen.getByText(/Decade: 1950s · Genre: any · Tag: Road trip/)).toBeInTheDocument();
-    for (const action of ["Mark Listened", "Reroll", "Change Choices", "Clear Selection"]) {
+    for (const action of ["Mark Listened", "Reroll", "Change Choices", "Remove"]) {
       expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
     }
     expect(screen.getByRole("link", { name: "Open Album" })).toHaveAttribute(
@@ -332,11 +383,28 @@ describe("Next Up page", () => {
     });
     find.focus();
     await user.keyboard("{Enter}");
-    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), {
+    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), 1, {
       mode: "guided",
       criteria: { years: { any_of: [{ decade: 1960 }] }, genres: "agnostic", tagIds: "agnostic" },
     });
     expect(await screen.findByRole("heading", { name: "Your Next Up" })).toBeInTheDocument();
+  });
+
+  it("makes Weighted Random unavailable once the Listen ASAP tag is deleted", async () => {
+    const user = userEvent.setup();
+    vi.mocked(nextUpOptions).mockImplementation((c) =>
+      Promise.resolve({ ...options(c), listenAsap: 0, listenAsapTag: false }),
+    );
+    renderApp("/next-up");
+    const weighted = await screen.findByRole("button", { name: "Weighted Random" });
+    await waitFor(() => {
+      expect(weighted).toHaveAccessibleDescription(
+        "Unavailable: you deleted the Listen ASAP tag it picks from",
+      );
+    });
+    expect(weighted).toHaveAttribute("aria-disabled", "true");
+    await user.click(weighted);
+    expect(rollNextUp).not.toHaveBeenCalled();
   });
 
   it("explains empty pools instead of falling back", async () => {
@@ -360,12 +428,13 @@ describe("Next Up page", () => {
     vi.mocked(rollNextUp).mockResolvedValue({ kind: "exhausted", poolSize: 3 });
     renderApp("/next-up");
     await user.click(await screen.findByRole("button", { name: "Reroll" }));
-    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), GUIDED);
+    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), 1, GUIDED);
     expect(await screen.findByText(/seen all 3 matching albums/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Kind of Blue" })).toBeInTheDocument();
     expect(resetNextUpPool).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Reset pool" }));
     expect(resetNextUpPool).toHaveBeenCalledTimes(1);
+    expect(resetNextUpPool).toHaveBeenCalledWith(1);
     expect(await screen.findByText(/Pool reset/)).toBeInTheDocument();
     expect(rollNextUp).toHaveBeenCalledTimes(1);
   });
@@ -391,13 +460,15 @@ describe("Next Up page", () => {
         "true",
       );
     });
-    expect(screen.getByText(/stays your Next Up until a new album is picked/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Back to current pick" }));
+    expect(
+      screen.getByText(/stays in your Next Up until a new album is picked here/),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("heading", { name: "Your Next Up" })).toBeInTheDocument();
     expect(rollNextUp).not.toHaveBeenCalled();
   });
 
-  it("marks listened with the pick linked, and clears without picking another", async () => {
+  it("marks listened with the pick linked, and removes without picking another", async () => {
     const user = userEvent.setup();
     vi.mocked(nextUpState).mockResolvedValue(WITH_PICK);
     const logged = {
@@ -406,7 +477,8 @@ describe("Next Up page", () => {
       undo: { listenId: "l" },
     } as unknown as Logged;
     vi.mocked(logListen).mockImplementation(() => {
-      vi.mocked(nextUpState).mockResolvedValue(NOTHING);
+      // The slot keeps its method, ready to pick again.
+      vi.mocked(nextUpState).mockResolvedValue(state([{ slot: 1, current: null, session: POOL }]));
       return Promise.resolve(logged);
     });
     renderApp("/next-up");
@@ -417,10 +489,14 @@ describe("Next Up page", () => {
       attemptId: pick().attemptId,
     });
     expect(await screen.findByText(/Next Up pick completed/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Completely Random" })).toBeInTheDocument();
+    const ready = await screen.findByRole("article", { name: "Ready for another pick" });
+    expect(ready).toHaveTextContent("Picks with Guided Recommendation");
     expect(rollNextUp).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Undo" }));
     expect(undoLog).toHaveBeenCalledWith(logged.undo);
+    await user.click(within(ready).getByRole("button", { name: "Pick an Album" }));
+    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), 1, GUIDED);
+    vi.mocked(rollNextUp).mockClear();
 
     vi.mocked(nextUpState).mockResolvedValue(WITH_PICK);
     vi.mocked(clearNextUp).mockImplementation(() => {
@@ -428,9 +504,83 @@ describe("Next Up page", () => {
       return Promise.resolve(true);
     });
     renderApp("/next-up");
-    await user.click(await screen.findByRole("button", { name: "Clear Selection" }));
-    expect(await screen.findByText(/Next Up cleared/)).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+    expect(clearNextUp).toHaveBeenCalledWith(1);
+    expect(
+      await screen.findByText("“Kind of Blue” removed from Next Up. It stays on your Listen List."),
+    ).toBeInTheDocument();
     expect(rollNextUp).not.toHaveBeenCalled();
+  });
+});
+
+describe("Next Up slots", () => {
+  it("gives each slot its own actions and adds another with fresh choices", async () => {
+    const user = userEvent.setup();
+    vi.mocked(nextUpState).mockResolvedValue(
+      state([{ slot: 1, current: pick(), session: POOL }, SECOND]),
+    );
+    vi.mocked(rollNextUp).mockResolvedValue({
+      kind: "picked",
+      shown: {
+        slot: 1,
+        attemptId: "a",
+        sessionId: "s",
+        albumId: "x",
+        editionId: "e",
+        source: "guided",
+      },
+      poolSize: 3,
+      remaining: 1,
+    });
+    renderApp("/next-up");
+    const first = await screen.findByRole("article", { name: "Kind of Blue" });
+    const second = slotCard("Bitches Brew");
+    expect(screen.getByText("2 of 5")).toBeInTheDocument();
+    expect(second).toHaveTextContent("You chose this album yourself.");
+    // A hand-picked slot has no method to reroll with.
+    expect(within(second).getByRole("button", { name: "Reroll" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await user.click(within(first).getByRole("button", { name: "Reroll" }));
+    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), 1, GUIDED);
+
+    // Adding opens fresh choices for the next free slot; the other picks stay.
+    await user.click(await screen.findByRole("button", { name: "Add Next Up" }));
+    expect(screen.getByText(/Your other Next Up picks stay as they are/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Guided Recommendation" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(slotCard("Bitches Brew")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add Next Up" }));
+    await user.click(screen.getByRole("button", { name: "Weighted Random" }));
+    expect(rollNextUp).toHaveBeenLastCalledWith(expect.any(String), 3, {
+      mode: "weighted_random",
+    });
+
+    await user.click(
+      within(await screen.findByRole("article", { name: "Bitches Brew" })).getByRole("button", {
+        name: "Remove",
+      }),
+    );
+    expect(clearNextUp).toHaveBeenCalledWith(2);
+  });
+
+  it("offers no Add when full, and explains when every match is already picked", async () => {
+    const user = userEvent.setup();
+    vi.mocked(nextUpState).mockResolvedValue(FULL);
+    vi.mocked(rollNextUp).mockResolvedValue({ kind: "empty", reason: "all_in_next_up" });
+    renderApp("/next-up");
+    expect(await screen.findByText(/5 of 5 — remove one to add another/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add Next Up" })).not.toBeInTheDocument();
+    await user.click(within(slotCard("Album 3")).getByRole("button", { name: "Reroll" }));
+    expect(rollNextUp).toHaveBeenCalledWith(expect.any(String), 3, GUIDED);
+    expect(
+      await screen.findByText(/Every album that matches is already in your Next Up/),
+    ).toBeInTheDocument();
+    expect(slotCard("Album 3")).toBeInTheDocument();
   });
 });
 
@@ -450,6 +600,7 @@ describe("Make Next Up", () => {
       tags: [],
     });
     vi.mocked(chooseNextUp).mockResolvedValue({
+      slot: 2,
       attemptId: "m",
       sessionId: "s",
       albumId: "a",
@@ -458,36 +609,64 @@ describe("Make Next Up", () => {
     });
   });
 
-  it("asks before replacing the current pick", async () => {
+  it("adds to a free slot without asking", async () => {
     const user = userEvent.setup();
     vi.mocked(nextUpState).mockResolvedValue(WITH_PICK);
     renderApp("/listen-list");
-    await user.click(await screen.findByRole("button", { name: "Make Blue Next Up" }));
-    const dialog = await screen.findByRole("dialog", { name: "Replace your Next Up?" });
-    expect(dialog).toHaveTextContent("“Kind of Blue” is your current Next Up");
-    await user.click(within(dialog).getByRole("button", { name: "Keep current pick" }));
-    expect(chooseNextUp).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("button", { name: "Make Blue Next Up" }));
-    await user.click(
-      within(await screen.findByRole("dialog", { name: "Replace your Next Up?" })).getByRole(
-        "button",
-        { name: "Make Next Up" },
-      ),
-    );
+    await user.click(await screen.findByRole("button", { name: "Add Blue to Next Up" }));
+    expect(await screen.findByText("“Blue” is now in your Next Up.")).toBeInTheDocument();
     expect(chooseNextUp).toHaveBeenCalledWith(
       expect.any(String),
       "0190f5c3-0000-7000-8000-0000000000e2",
+      undefined,
     );
-    expect(await screen.findByText("“Blue” is now your Next Up.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(albumDetail).not.toHaveBeenCalled();
   });
 
-  it("makes Next Up directly when nothing is picked", async () => {
+  it("says when the album is already in Next Up", async () => {
     const user = userEvent.setup();
+    vi.mocked(nextUpState).mockResolvedValue(
+      state([
+        {
+          slot: 3,
+          current: pick({ slot: 3, editionId: "0190f5c3-0000-7000-8000-0000000000e2" }),
+          session: null,
+        },
+      ]),
+    );
     renderApp("/listen-list");
-    await user.click(await screen.findByRole("button", { name: "Make Blue Next Up" }));
-    expect(await screen.findByText("“Blue” is now your Next Up.")).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Replace your Next Up?" })).not.toBeInTheDocument();
-    expect(albumDetail).not.toHaveBeenCalled();
+    await user.click(await screen.findByRole("button", { name: "Add Blue to Next Up" }));
+    expect(await screen.findByText("“Blue” is already in your Next Up.")).toBeInTheDocument();
+    expect(chooseNextUp).not.toHaveBeenCalled();
+  });
+
+  it("asks which pick to replace when every slot is in use", async () => {
+    const user = userEvent.setup();
+    vi.mocked(nextUpState).mockResolvedValue(FULL);
+    renderApp("/listen-list");
+    await user.click(await screen.findByRole("button", { name: "Add Blue to Next Up" }));
+    const dialog = await screen.findByRole("dialog", { name: "Your Next Up is full" });
+    expect(dialog).toHaveTextContent("All 5 Next Up slots are in use");
+    expect(within(dialog).getAllByRole("radio")).toHaveLength(5);
+    const replace = within(dialog).getByRole("button", { name: "Replace" });
+    expect(replace).toHaveAttribute("aria-disabled", "true");
+    await user.click(replace);
+    expect(chooseNextUp).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(chooseNextUp).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Add Blue to Next Up" }));
+    const again = await screen.findByRole("dialog", { name: "Your Next Up is full" });
+    await user.click(within(again).getByRole("radio", { name: /Album 4/ }));
+    await user.click(within(again).getByRole("button", { name: "Replace" }));
+    expect(chooseNextUp).toHaveBeenCalledWith(
+      expect.any(String),
+      "0190f5c3-0000-7000-8000-0000000000e2",
+      4,
+    );
+    expect(
+      await screen.findByText("“Blue” replaced “Album 4” in your Next Up."),
+    ).toBeInTheDocument();
   });
 });

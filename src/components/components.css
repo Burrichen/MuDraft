@@ -628,6 +628,18 @@
   color: var(--accent-text);
 }
 
+/* Excluded ("not this tag"): red, with ✕ instead of ✓. */
+.filter-bubble[data-excluded="true"] {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--text);
+}
+
+.filter-bubble[data-excluded="true"]::before {
+  content: "✕";
+  color: var(--danger);
+}
+
 .filter-count {
   padding: 0 var(--space-1);
   border-radius: var(--radius-pill);
@@ -809,6 +821,10 @@
     border: 2px solid CanvasText;
   }
 
+  .filter-bubble[data-excluded="true"] {
+    border-style: dashed;
+  }
+
   .progress-fill,
   .star-full {
     background: Highlight;
@@ -855,6 +871,11 @@
   border-radius: var(--radius);
   background: var(--surface-raised);
   box-shadow: var(--shadow-raised);
+}
+
+/* Focus lands on the popover itself only from a click (see Popover.tsx); it isn't a tab stop. */
+.popover:focus {
+  outline: none;
 }
 
 @media (forced-colors: active) {

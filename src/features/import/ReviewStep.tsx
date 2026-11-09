@@ -168,9 +168,9 @@ export function ReviewStep({
   const commitReason = committing
     ? "Importing…"
     : lookup.running
-      ? "Pause the MusicBrainz lookups first."
+      ? "Pause the online lookups first."
       : c.needsAttention > 0
-        ? `${String(c.needsAttention)} rows need a MusicBrainz lookup or an edition choice. Look them up, keep them as manual entries, or skip them.`
+        ? `${String(c.needsAttention)} rows need an online lookup or an edition choice. Look them up, keep them as manual entries, or skip them.`
         : c.ready === 0
           ? "No rows are ready to import."
           : undefined;
@@ -195,7 +195,7 @@ export function ReviewStep({
           <dd>{c.ready}</dd>
           <dt>Manual entries</dt>
           <dd>{c.manual}</dd>
-          <dt>Matched on MusicBrainz</dt>
+          <dt>Matched online</dt>
           <dd>{c.matched}</dd>
           <dt>Already in library</dt>
           <dd>{c.existing}</dd>
@@ -210,7 +210,7 @@ export function ReviewStep({
 
       <section className="panel section" aria-labelledby="import-lookup">
         <h2 id="import-lookup" className="section-title">
-          MusicBrainz lookup (optional)
+          Online lookup (optional)
         </h2>
         <p className="setting-hint">
           Looks rows up one at a time (about one per second) to confirm IDs and suggest matches.

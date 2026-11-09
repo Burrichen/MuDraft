@@ -435,6 +435,55 @@ async fn not_found_and_bad_json_are_reported() {
     );
 }
 
+#[tokio::test(start_paused = true)]
+async fn search_never_offers_interviews_audiobooks_or_audio_dramas() {
+    let body = format!(
+        r#"{{"count": 4, "offset": 0, "release-groups": [
+          {{"id": "{RG}", "title": "OK Computer", "primary-type": "Album"}},
+          {{"id": "0a1b2c3d-0000-4000-8000-000000000011", "title": "Talk", "primary-type": "Other",
+            "secondary-types": ["Interview"]}},
+          {{"id": "0a1b2c3d-0000-4000-8000-000000000012", "title": "Read", "primary-type": "Other",
+            "secondary-types": ["Audiobook"]}},
+          {{"id": "0a1b2c3d-0000-4000-8000-000000000013", "title": "Play", "primary-type": "Album",
+            "secondary-types": ["Live", "Audio drama"]}}
+        ]}}"#
+    );
+    let t = Arc::new(MockTransport::new(move |_, _| {
+        Reply::Json(200, body.clone())
+    }));
+    let mb = provider(t, Arc::default());
+    let page = mb
+        .search(&query("OK Computer", None), 0, &CancellationToken::new())
+        .await
+        .unwrap();
+    let titles: Vec<&str> = page
+        .value
+        .candidates
+        .iter()
+        .map(|c| c.title.as_str())
+        .collect();
+    assert_eq!(titles, ["OK Computer"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn release_group_lookups_carry_their_types() {
+    let body = format!(
+        r#"{{"id": "{RG}", "title": "OK Computer", "primary-type": "Album",
+            "secondary-types": ["Live"]}}"#
+    );
+    let t = Arc::new(MockTransport::new(move |_, _| {
+        Reply::Json(200, body.clone())
+    }));
+    let mb = provider(t, Arc::default());
+    let g = mb
+        .release_group(RG, &CancellationToken::new())
+        .await
+        .unwrap()
+        .value;
+    assert_eq!(g.primary_type.as_deref(), Some("Album"));
+    assert_eq!(g.secondary_types, Some(vec!["Live".to_owned()]));
+}
+
 /// Live check against musicbrainz.org through the real transport and User-Agent.
 /// Never runs by default: `cargo test live_musicbrainz -- --ignored`.
 #[tokio::test]

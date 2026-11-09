@@ -31,12 +31,15 @@ export function HealthStatus({ compact = false }: { compact?: boolean }) {
     };
   }, []);
 
-  const label =
+  const lines =
     state.kind === "checking"
-      ? "Checking storage…"
+      ? ["Checking storage…"]
       : state.kind === "ok"
-        ? `Storage OK · schema v${String(state.report.schemaVersion)}${state.report.profile === "development" ? " · dev" : ""}`
-        : `Storage error: ${state.code}`;
+        ? [
+            `Version: ${state.report.appVersion}`,
+            `Storage OK${state.report.profile === "development" ? " · dev" : ""}`,
+          ]
+        : [`Storage error: ${state.code}`];
 
   return (
     <div
@@ -46,7 +49,13 @@ export function HealthStatus({ compact = false }: { compact?: boolean }) {
       title={state.kind === "ok" ? state.report.dataDir : undefined}
     >
       <span className="health-dot" aria-hidden="true" />
-      <span className={compact ? "visually-hidden" : "health-detail"}>{label}</span>
+      <span className={compact ? "visually-hidden" : "health-detail"}>
+        {lines.map((line) => (
+          <span key={line} className="health-line">
+            {line}
+          </span>
+        ))}
+      </span>
     </div>
   );
 }

@@ -220,7 +220,7 @@ fn large_library_measurements() {
     let mut writable = Database::open(&path).unwrap();
     time("Next Up roll (Completely Random)", 5, || {
         writable
-            .write(|tx| next_up::roll(tx, None, Method::CompletelyRandom, 2026, &mut First))
+            .write(|tx| next_up::roll(tx, None, 1, Method::CompletelyRandom, 2026, &mut First))
             .unwrap()
     });
     time("Artist page (artist with ~5 albums)", 5, || {

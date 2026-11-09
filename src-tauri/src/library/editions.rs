@@ -34,7 +34,7 @@ pub fn check_new_edition(
     if rgid.is_none() || rgid != release.release_group_id {
         return Err(AppError::validation(
             "edition",
-            "that release belongs to a different album on MusicBrainz",
+            "that release belongs to a different album in the online metadata",
         ));
     }
     if let Some(name) = conn

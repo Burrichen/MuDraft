@@ -13,7 +13,9 @@ use tokio_util::sync::CancellationToken;
 
 use super::staging::{self, Candidates, ChosenBy, Decision, MatchDetails};
 use crate::error::{AppError, AppResult};
-use crate::metadata::{MetadataProvider, SearchQuery};
+use crate::metadata::{
+    MetadataProvider, SearchQuery, UNSUPPORTED_MESSAGE, unsupported_release_type,
+};
 use crate::state::AppState;
 
 pub const MAX_BATCH: u32 = 25;
@@ -96,7 +98,7 @@ pub async fn enrich(
             }
             Err(AppError::NotFound { .. }) => {
                 let failed = Candidates::Failed {
-                    message: "MusicBrainz has no entry for the ID in this row. Check it, or keep the row as manual."
+                    message: "No online entry matches the ID in this row. Check it, or keep the row as manual."
                         .into(),
                 };
                 state.with_db(|db| {
@@ -163,7 +165,7 @@ async fn resolve_ids(
     let group_id = release.value.release_group_id.clone().ok_or_else(|| {
         AppError::validation(
             "release ID",
-            "MusicBrainz did not say which album this release belongs to",
+            "the online metadata doesn’t say which album this release belongs to",
         )
     })?;
     if let Some(hint) = group_hint
@@ -175,6 +177,14 @@ async fn resolve_ids(
         ));
     }
     let group = provider.release_group(&group_id, cancel).await?;
+    if group
+        .value
+        .secondary_types
+        .as_deref()
+        .is_some_and(unsupported_release_type)
+    {
+        return Err(AppError::validation("release ID", UNSUPPORTED_MESSAGE));
+    }
     let decision = Decision::Match {
         release_group_id: Some(group_id),
         release_id: Some(release_id.to_owned()),
@@ -236,7 +246,7 @@ async fn enrich_row(
                 [] => Ok(RowOutcome {
                     state: "failed",
                     candidates: Some(Candidates::Failed {
-                        message: "MusicBrainz lists no editions for this album.".into(),
+                        message: "No editions are listed for this album.".into(),
                     }),
                     resolved: None,
                 }),
@@ -560,6 +570,36 @@ mod tests {
             r.readiness,
             staging::Readiness::NeedsLookup,
             "blocks commit until the user decides"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn spoken_word_ids_fail_the_row() {
+        // The release group behind the CSV's IDs is an audiobook.
+        let t = Arc::new(MockTransport::new(|url, _| {
+            if url.contains("/release-group/") {
+                Reply::Json(
+                    200,
+                    format!(
+                        r#"{{"id": "{RG}", "title": "Read Aloud", "primary-type": "Other",
+                            "secondary-types": ["Audiobook"]}}"#
+                    ),
+                )
+            } else {
+                reply(url)
+            }
+        }));
+        let csv = format!("{HEADER}Read Aloud,Someone,,,{RG},{REL}\n");
+        let (_d, state, mb, s) = setup(&csv, t);
+        enrich(&mb, &state, &s, 5, &CancellationToken::new())
+            .await
+            .unwrap();
+        let r = row(&state, &s, 2);
+        assert_eq!(r.enrichment, "failed");
+        assert!(
+            matches!(r.candidates, Some(Candidates::Failed { ref message }) if message.contains("audiobooks")),
+            "{:?}",
+            r.candidates
         );
     }
 

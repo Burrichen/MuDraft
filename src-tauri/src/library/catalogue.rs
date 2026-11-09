@@ -112,7 +112,7 @@ pub fn create_artist(
                 id,
                 required_text("artist name", &input.name)?,
                 optional_text("artist sort name", input.sort_name.as_deref())?,
-                parse_optional_uuid("MusicBrainz artist ID", input.musicbrainz_id.as_deref())?,
+                parse_optional_uuid("artist ID", input.musicbrainz_id.as_deref())?,
             ],
         )?;
         Ok(id)
@@ -129,7 +129,7 @@ pub fn create_album(
         let (date, precision) =
             PartialDate::parse("original date", input.original_date.as_deref())?.to_db();
         let mbid = parse_optional_uuid(
-            "MusicBrainz release group ID",
+            "release group ID",
             input.musicbrainz_release_group_id.as_deref(),
         )?;
         if input.credits.is_empty() {
@@ -169,10 +169,7 @@ pub fn create_edition(
         let name = required_text("edition name", &input.name)?;
         let (date, precision) =
             PartialDate::parse("edition release date", input.release_date.as_deref())?.to_db();
-        let mbid = parse_optional_uuid(
-            "MusicBrainz release ID",
-            input.musicbrainz_release_id.as_deref(),
-        )?;
+        let mbid = parse_optional_uuid("release ID", input.musicbrainz_release_id.as_deref())?;
 
         let edition_id = new_id();
         tx.execute(
@@ -219,7 +216,7 @@ pub fn create_edition(
                     required_text("track title", &track.title)?,
                     positive_length(track.length_ms)?,
                     recording_id,
-                    parse_optional_uuid("MusicBrainz track ID", track.musicbrainz_track_id.as_deref())?,
+                    parse_optional_uuid("track ID", track.musicbrainz_track_id.as_deref())?,
                 ],
             )?;
             insert_credits(
@@ -251,7 +248,7 @@ pub fn create_recording(
                 id,
                 required_text("recording title", &input.title)?,
                 positive_length(input.length_ms)?,
-                parse_optional_uuid("MusicBrainz recording ID", input.musicbrainz_recording_id.as_deref())?,
+                parse_optional_uuid("recording ID", input.musicbrainz_recording_id.as_deref())?,
             ],
         )?;
         Ok(id)

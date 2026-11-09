@@ -149,6 +149,17 @@
   color: var(--text-muted);
 }
 
+.health-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+/* Collapsed: still read as two phrases by screen readers. */
+.health-line + .health-line::before {
+  content: " ";
+}
+
 .shell[data-compact="true"] .health {
   justify-content: center;
 }
@@ -439,4 +450,42 @@
   justify-content: center;
   gap: var(--space-3);
   margin-top: var(--space-5);
+}
+
+/* ---------------------------------------------------------------- update prompt */
+
+.release-notes-title {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.release-notes {
+  max-height: 16rem;
+  overflow: auto;
+  color: var(--text-muted);
+}
+
+.release-notes p {
+  margin: 0 0 var(--space-2);
+}
+
+.release-notes ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+  padding-left: 1.25rem;
+}
+
+.update-progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.update-progress progress {
+  width: 100%;
+  accent-color: var(--accent);
 }

@@ -1,4 +1,7 @@
-/** Mirrors `PRIMARY_TYPES` / `SECONDARY_TYPES` in `library/discography.rs`. */
+/**
+ * Mirrors `PRIMARY_TYPES` / `SECONDARY_TYPES` in `library/discography.rs`. Interviews,
+ * audiobooks, and audio dramas are out of scope and never offered.
+ */
 export const PRIMARY_TYPES = ["Album", "EP", "Single", "Broadcast", "Other"] as const;
 export const SECONDARY_TYPES = [
   "Compilation",
@@ -9,9 +12,6 @@ export const SECONDARY_TYPES = [
   "Mixtape/Street",
   "Demo",
   "Spokenword",
-  "Interview",
-  "Audiobook",
-  "Audio drama",
   "Field recording",
 ] as const;
 

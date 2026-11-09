@@ -378,7 +378,7 @@ fn fixture_matches_hand_calculated_results() {
 
     // ---- Next Up provenance
     db.write(|tx| {
-        let s1 = selection::start_session(tx, SelectionMode::CompletelyRandom, None)?;
+        let s1 = selection::start_session(tx, 1, SelectionMode::CompletelyRandom, None)?;
         selection::record_attempt(
             tx,
             &s1,
@@ -391,7 +391,7 @@ fn fixture_matches_hand_calculated_results() {
             &six_std.edition_id,
             SelectionSource::CompletelyRandom,
         )?;
-        let s2 = selection::start_session(tx, SelectionMode::WeightedRandom, None)?;
+        let s2 = selection::start_session(tx, 1, SelectionMode::WeightedRandom, None)?;
         let w = selection::record_attempt(
             tx,
             &s2,
@@ -399,7 +399,7 @@ fn fixture_matches_hand_calculated_results() {
             SelectionSource::WeightedRandom,
         )?;
         selection::resolve_attempt(tx, &w, AttemptStatus::Completed)?;
-        let s3 = selection::start_session(tx, SelectionMode::Manual, None)?;
+        let s3 = selection::start_session(tx, 1, SelectionMode::Manual, None)?;
         selection::record_attempt(tx, &s3, &five_std.edition_id, SelectionSource::Manual)?;
         // Today's tags must not rewrite history.
         catalogue::untag_album(tx, &six, ASAP)
@@ -430,7 +430,6 @@ fn fixture_matches_hand_calculated_results() {
         .collect();
     assert_eq!(genres, [("Pop", 1), ("Rock", 1)]);
     assert_eq!(l.albums_without_genre, 1);
-    assert_eq!(l.listen_asap, 0, "untagged after the weighted pick");
     let oldest: Vec<(&str, i64)> = l
         .oldest_waiting
         .iter()
@@ -627,4 +626,125 @@ fn various_artists_is_not_counted_as_an_artist() {
     assert_eq!(listed, ["Alpha"]);
     // The albums themselves still count everywhere else.
     assert_eq!(s.collection.ratings.rated_albums, 9);
+}
+
+/// An album in the Collection with an explicit album rating and rated tracks (half-stars);
+/// `credits` gives each track's credited artist (empty: the album's).
+fn collected(
+    db: &mut Database,
+    title: &str,
+    who: &str,
+    album_half_stars: i64,
+    tracks: &[(i64, Option<&str>)],
+) -> catalogue::EditionCreated {
+    let al = album(db, title, &[who], Some("2000"), &["Rock"]);
+    let ed = db
+        .write(|tx| {
+            catalogue::create_edition(
+                tx,
+                None,
+                &NewEdition {
+                    album_id: al.clone(),
+                    name: "Standard".into(),
+                    release_date: None,
+                    musicbrainz_release_id: None,
+                    tracks: tracks
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (_, guest))| NewTrack {
+                            disc_number: None,
+                            position: i as i64 + 1,
+                            title: format!("{title} {i}"),
+                            length_ms: None,
+                            recording_id: None,
+                            musicbrainz_track_id: None,
+                            credits: guest.map(|g| vec![credit(g)]).unwrap_or_default(),
+                        })
+                        .collect(),
+                },
+            )
+        })
+        .unwrap();
+    db.write(|tx| {
+        personal::add_to_collection(tx, &ed.edition_id, personal::CollectionSource::Manual)?;
+        ratings::set_album(tx, &ed.edition_id, Some(album_half_stars))?;
+        for (id, (half, _)) in ed.track_ids.iter().zip(tracks) {
+            ratings::set_track(tx, id, Some(*half))?;
+        }
+        Ok(())
+    })
+    .unwrap();
+    ed
+}
+
+#[test]
+fn top_rated_by_tracks_weights_every_rated_track_and_keeps_the_album_minimum() {
+    let (_d, mut db) = open_temp();
+    let alpha = artist(&mut db, "Alpha");
+    let beta = artist(&mut db, "Beta");
+    let gamma = artist(&mut db, "Gamma");
+    let guest = artist(&mut db, "Guest");
+    // Alpha: albums rated 5★, their tracks 1★.
+    for i in 0..3 {
+        collected(&mut db, &format!("Alpha {i}"), &alpha, 10, &[(2, None)]);
+    }
+    // Beta: albums rated 1★, tracks mostly 4★. One track is credited to a guest.
+    collected(
+        &mut db,
+        "Beta 0",
+        &beta,
+        2,
+        &[(8, None), (8, None), (2, None)],
+    );
+    collected(&mut db, "Beta 1", &beta, 2, &[(8, None)]);
+    collected(&mut db, "Beta 2", &beta, 2, &[(8, None), (8, Some(&guest))]);
+    // Gamma: one album with five 5★ tracks — plenty of tracks, but only one album.
+    collected(&mut db, "Gamma 0", &gamma, 10, &[(10, None); 5]);
+
+    // The same recording on two editions of one album counts once: 1★ and 3★ make 2★.
+    let shared = recording(&mut db, "Shared");
+    let al = album(&mut db, "Alpha 3", &[&alpha], Some("2000"), &["Rock"]);
+    for (name, half) in [("Standard", 2), ("Deluxe", 6)] {
+        let ed = edition(&mut db, &al, name, None, &[(None, Some(&shared))]);
+        db.write(|tx| {
+            personal::add_to_collection(tx, &ed.edition_id, personal::CollectionSource::Manual)?;
+            ratings::set_track(tx, &ed.track_ids[0], Some(half)).map(|_| ())
+        })
+        .unwrap();
+    }
+
+    let col = db.read(stats::collection).unwrap();
+    let top = |best: &Best| -> Vec<String> { best.top.iter().map(|g| g.label.clone()).collect() };
+    // By album score: Alpha (5★ ×3 and Alpha 3 at 2★ = 4.25★) beats Beta (1★); Gamma has
+    // one album, so isn't ranked.
+    assert_eq!(top(&col.best_artist), ["Alpha", "Beta"]);
+
+    let t = &col.track_rankings;
+    // Beta: (4 + 4 + 1) + 4 + 4 = 17 over 5 tracks = 3.4★ (album-weighted it would be 3.67★).
+    // Alpha: 1 + 1 + 1 + 2 = 5 over 4 tracks = 1.25★.
+    let g = |label: &str| {
+        let g = t
+            .best_artist
+            .groups
+            .iter()
+            .find(|g| g.label == label)
+            .unwrap();
+        (g.mean_stars, g.albums, g.tracks)
+    };
+    assert!(close(g("Beta").0, 3.4));
+    assert_eq!((g("Beta").1, g("Beta").2), (3, Some(5)));
+    assert!(close(g("Alpha").0, 1.25));
+    assert_eq!((g("Alpha").1, g("Alpha").2), (4, Some(4)));
+    // Gamma (5★ from one album) and Guest (one track) are listed but not ranked.
+    assert_eq!((g("Gamma").1, g("Gamma").2), (1, Some(5)));
+    assert_eq!((g("Guest").1, g("Guest").2), (1, Some(1)));
+    assert_eq!(top(&t.best_artist), ["Beta", "Alpha"]);
+    // Alpha 3 + Beta 6 + Gamma 5 + the shared recording once = 15, all from 2000 and Rock.
+    assert_eq!(t.rated_tracks, 15);
+    assert_eq!(t.best_year.top[0].tracks, Some(15));
+    assert_eq!(t.best_genre.top[0].albums, 8);
+    assert!(
+        col.best_year.top[0].tracks.is_none(),
+        "album rankings carry no track count"
+    );
 }

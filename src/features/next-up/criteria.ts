@@ -68,6 +68,8 @@ export function emptyMessage(reason: EmptyReason): string {
       return "No albums on your Listen List are tagged Listen ASAP. Weighted Random only picks from those — tag some albums, or use Completely Random.";
     case "no_guided_matches":
       return "No albums on your Listen List match all of these choices. Remove a choice to widen the search.";
+    case "all_in_next_up":
+      return "Every album that matches is already in your Next Up. Listen to or remove one first, or change your choices.";
   }
 }
 
@@ -100,7 +102,7 @@ export function eligibilityMessage(pick: CurrentPick): string | null {
     case "eligible":
       return null;
     case "not_on_listen_list":
-      return "This album is no longer on your Listen List. It stays your Next Up until you change it.";
+      return "This album is no longer on your Listen List. It stays in your Next Up until you change it.";
     case "edition_changed":
       return "Your Listen List now has a different edition of this album.";
     case "no_longer_matches":

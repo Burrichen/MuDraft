@@ -103,7 +103,7 @@ export function AddEditionDialog({
           Add an edition only when it’s genuinely different — for example a Deluxe edition with
           extra tracks. Another pressing with the same tracks isn’t added separately.
         </p>
-        {!choices && !loadError && <LoadingState label="Loading editions from MusicBrainz…" />}
+        {!choices && !loadError && <LoadingState label="Loading editions…" />}
         {loadError && (
           <ErrorState
             title="Couldn’t load editions"

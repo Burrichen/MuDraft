@@ -1,6 +1,8 @@
 //! Next Up: rolls, pool resets, and manual picks over the current Listen List, recorded
-//! through `selection`. Candidates are read fresh on every call, so list and tag edits
-//! are reflected immediately; the current pick is revalidated rather than silently changed.
+//! through `selection`. There are up to [`MAX_SLOTS`] independent slots, each with its own
+//! picking method, reroll pool, and current album; no album is the pick of two slots.
+//! Candidates are read fresh on every call, so list and tag edits are reflected
+//! immediately; a current pick is revalidated rather than silently changed.
 //! Nothing here rolls on read: a result changes only through roll, choose, clear, or a
 //! completed listen.
 //! Rolling never logs listening or changes ratings or list membership.
@@ -13,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use super::idempotency;
 use super::listing::{self, ListItem, TagRef};
 use super::required_text;
-use super::selection::{self, AttemptStatus, SelectionMode, SelectionSource, enum_from};
+use super::selection::{
+    self, AttemptStatus, MAX_SLOTS, SelectionMode, SelectionSource, check_slot, enum_from,
+};
 use crate::domain::ids::parse_uuid;
 use crate::domain::picker::{
     self, Candidate, EmptyReason, Filter, GuidedCriteria, Method, Pick, RandomSource, YearChoice,
@@ -175,12 +179,13 @@ fn method_of(mode: &str, criteria: Option<String>) -> AppResult<Option<Method>> 
     })
 }
 
-fn open_session(conn: &Connection) -> AppResult<Option<OpenSession>> {
+/// `slot`'s open reroll session, if its method is readable.
+fn open_session(conn: &Connection, slot: i64) -> AppResult<Option<OpenSession>> {
     let row: Option<(String, String, Option<String>, i64)> = conn
         .query_row(
             "SELECT id, mode, criteria, pool_cycle FROM selection_session
-             WHERE ended_at IS NULL AND mode != 'manual'",
-            [],
+             WHERE ended_at IS NULL AND mode != 'manual' AND slot = ?1",
+            params![slot],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .optional()?;
@@ -208,19 +213,14 @@ fn mode_and_source(method: &Method) -> (SelectionMode, SelectionSource) {
     }
 }
 
-/// The open session if it uses exactly this method; otherwise a new one.
-fn session_for(tx: &Transaction<'_>, method: &Method) -> AppResult<OpenSession> {
-    if let Some(open) = open_session(tx)?
-        && open.method == *method
-    {
-        return Ok(open);
-    }
+/// Begin a new reroll session for `method` in `slot`, closing the slot's previous one.
+fn new_session(tx: &Transaction<'_>, slot: i64, method: &Method) -> AppResult<OpenSession> {
     let (mode, _) = mode_and_source(method);
     let criteria = match method {
         Method::Guided(g) => Some(g),
         _ => None,
     };
-    let id = selection::start_session(tx, mode, criteria)?;
+    let id = selection::start_session(tx, slot, mode, criteria)?;
     Ok(OpenSession {
         id,
         method: method.clone(),
@@ -237,20 +237,50 @@ fn seen(conn: &Connection, session_id: &str, cycle: i64) -> AppResult<HashSet<St
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-fn current_shown_album(conn: &Connection) -> AppResult<Option<String>> {
+fn current_shown_album(conn: &Connection, slot: i64) -> AppResult<Option<String>> {
     Ok(conn
         .query_row(
             "SELECT a.album_id FROM current_selection c
-             JOIN selection_attempt a ON a.id = c.attempt_id WHERE a.status = 'shown'",
-            [],
+             JOIN selection_attempt a ON a.id = c.attempt_id
+             WHERE a.status = 'shown' AND c.slot = ?1",
+            params![slot],
             |r| r.get(0),
         )
         .optional()?)
 }
 
+/// Albums that are the current pick of a slot other than `slot`.
+fn taken_elsewhere(conn: &Connection, slot: i64) -> AppResult<HashSet<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT a.album_id FROM current_selection c
+         JOIN selection_attempt a ON a.id = c.attempt_id WHERE c.slot != ?1",
+    )?;
+    let rows = stmt.query_map(params![slot], |r| r.get(0))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// Slots holding a current pick or an open reroll session, in order.
+fn used_slots(conn: &Connection) -> AppResult<Vec<i64>> {
+    let mut stmt = conn.prepare(
+        "SELECT slot FROM current_selection
+         UNION
+         SELECT slot FROM selection_session WHERE ended_at IS NULL AND mode != 'manual'
+         ORDER BY slot",
+    )?;
+    let rows = stmt.query_map([], |r| r.get(0))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
+/// The lowest slot with neither a pick nor a picking method, if any.
+pub fn next_free_slot(conn: &Connection) -> AppResult<Option<i64>> {
+    let used = used_slots(conn)?;
+    Ok((1..=MAX_SLOTS).find(|s| !used.contains(s)))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Shown {
+    pub slot: i64,
     pub attempt_id: String,
     pub session_id: String,
     pub album_id: String,
@@ -276,23 +306,61 @@ pub enum RollOutcome {
     Exhausted { pool_size: usize },
 }
 
-/// Roll (or reroll) with `method`. Same method and criteria continue the open session;
-/// anything else begins a new one. `key` makes double clicks roll once.
+/// Albums `method` may pick in `slot`: every candidate, less the picks of other slots
+/// unless nothing would match at all (so the empty reason stays about the Listen List).
+/// `None` when every match is already another slot's pick.
+fn pickable(
+    method: &Method,
+    all: Vec<Candidate>,
+    taken: &HashSet<String>,
+    current_year: i32,
+) -> Option<Vec<Candidate>> {
+    let matching = picker::eligible(method, &all, current_year);
+    if matching.is_empty() {
+        return Some(all);
+    }
+    if matching.iter().all(|c| taken.contains(&c.album_id)) {
+        return None;
+    }
+    Some(
+        all.into_iter()
+            .filter(|c| !taken.contains(&c.album_id))
+            .collect(),
+    )
+}
+
+/// Roll (or reroll) `slot` with `method`. Same method and criteria continue the slot's open
+/// session; anything else begins a new one once something is picked. Albums picked in
+/// other slots are never offered. `key` makes double clicks roll once.
 pub fn roll(
     tx: &Transaction<'_>,
     key: Option<&str>,
+    slot: i64,
     method: Method,
     current_year: i32,
     rng: &mut dyn RandomSource,
 ) -> AppResult<RollOutcome> {
+    let slot = check_slot(slot)?;
     let method = validate(tx, method)?;
-    idempotency::once(tx, key, "next_up_roll", &method, |tx| {
-        let session = session_for(tx, &method)?;
-        let all = candidates(tx)?;
-        let seen = seen(tx, &session.id, session.pool_cycle)?;
+    idempotency::once(tx, key, "next_up_roll", &(slot, &method), |tx| {
+        let open = open_session(tx, slot)?.filter(|o| o.method == method);
+        let Some(all) = pickable(
+            &method,
+            candidates(tx)?,
+            &taken_elsewhere(tx, slot)?,
+            current_year,
+        ) else {
+            return Ok(RollOutcome::Empty {
+                reason: EmptyReason::AllInNextUp,
+            });
+        };
+        let seen = match &open {
+            Some(o) => seen(tx, &o.id, o.pool_cycle)?,
+            None => HashSet::new(),
+        };
         // After a reset, prefer a different album to the one already on screen.
         let mut avoid = seen.clone();
-        if let Some(current) = current_shown_album(tx)? {
+        if let Some(current) = current_shown_album(tx, slot)? {
             avoid.insert(current);
         }
         let mut choice = picker::pick(&method, &all, &avoid, current_year, rng)?;
@@ -308,10 +376,15 @@ pub fn roll(
             Pick::Empty(reason) => return Ok(RollOutcome::Empty { reason }),
             Pick::Exhausted { pool_size } => return Ok(RollOutcome::Exhausted { pool_size }),
         };
+        let session = match open {
+            Some(o) => o,
+            None => new_session(tx, slot, &method)?,
+        };
         let (_, source) = mode_and_source(&method);
         let attempt_id = selection::record_attempt(tx, &session.id, &candidate.edition_id, source)?;
         Ok(RollOutcome::Picked {
             shown: Shown {
+                slot,
                 attempt_id,
                 session_id: session.id,
                 album_id: candidate.album_id.clone(),
@@ -327,53 +400,86 @@ pub fn roll(
     })
 }
 
-/// Start the open session's next pool cycle. Repeating it before anything new is shown
-/// changes nothing.
-pub fn reset_pool(tx: &Transaction<'_>) -> AppResult<i64> {
-    let open =
-        open_session(tx)?.ok_or_else(|| AppError::not_found("Next Up session", "open session"))?;
+/// Start the next pool cycle of `slot`'s open session. Repeating it before anything new
+/// is shown changes nothing.
+pub fn reset_pool(tx: &Transaction<'_>, slot: i64) -> AppResult<i64> {
+    let slot = check_slot(slot)?;
+    let open = open_session(tx, slot)?
+        .ok_or_else(|| AppError::not_found("Next Up session", format!("slot {slot}")))?;
     selection::reset_pool(tx, &open.id)
 }
 
-/// Make a Listen List edition the current pick by hand (provenance: Manual). The open
-/// reroll session and its pool are left as they are.
-pub fn choose(tx: &Transaction<'_>, key: Option<&str>, edition_id: &str) -> AppResult<Shown> {
+/// Make a Listen List edition a pick by hand (provenance: Manual): in `slot`, replacing its
+/// pick (which counts as skipped), or else in the lowest free slot. The slot's reroll
+/// session and pool are left as they are.
+pub fn choose(
+    tx: &Transaction<'_>,
+    key: Option<&str>,
+    edition_id: &str,
+    slot: Option<i64>,
+) -> AppResult<Shown> {
     let edition_id = parse_uuid("edition", edition_id)?;
-    idempotency::once(tx, key, "next_up_choose", &edition_id.clone(), |tx| {
-        let album_id = super::album_of_edition(tx, &edition_id)?;
-        let listed: Option<String> = tx
-            .query_row(
-                "SELECT edition_id FROM listen_list_entry WHERE album_id = ?1",
-                params![album_id],
-                |r| r.get(0),
-            )
-            .optional()?;
-        match listed {
-            None => {
+    let slot = slot.map(check_slot).transpose()?;
+    idempotency::once(
+        tx,
+        key,
+        "next_up_choose",
+        &(edition_id.clone(), slot),
+        |tx| {
+            let album_id = super::album_of_edition(tx, &edition_id)?;
+            let listed: Option<String> = tx
+                .query_row(
+                    "SELECT edition_id FROM listen_list_entry WHERE album_id = ?1",
+                    params![album_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            match listed {
+                None => {
+                    return Err(AppError::validation(
+                        "Next Up pick",
+                        "add the album to your Listen List first",
+                    ));
+                }
+                Some(listed) if listed != edition_id => {
+                    return Err(AppError::validation(
+                        "Next Up pick",
+                        "a different edition of this album is on your Listen List",
+                    ));
+                }
+                Some(_) => {}
+            }
+            if selection::current_selections(tx)?
+                .iter()
+                .any(|c| c.album_id == album_id)
+            {
                 return Err(AppError::validation(
                     "Next Up pick",
-                    "add the album to your Listen List first",
+                    "this album is already in your Next Up",
                 ));
             }
-            Some(listed) if listed != edition_id => {
-                return Err(AppError::validation(
-                    "Next Up pick",
-                    "a different edition of this album is on your Listen List",
-                ));
-            }
-            Some(_) => {}
-        }
-        let session_id = selection::start_session(tx, SelectionMode::Manual, None)?;
-        let attempt_id =
-            selection::record_attempt(tx, &session_id, &edition_id, SelectionSource::Manual)?;
-        Ok(Shown {
-            attempt_id,
-            session_id,
-            album_id,
-            edition_id,
-            source: SelectionSource::Manual,
-        })
-    })
+            let slot = match slot {
+                Some(s) => s,
+                None => next_free_slot(tx)?.ok_or_else(|| {
+                    AppError::validation(
+                        "Next Up pick",
+                        format!("all {MAX_SLOTS} Next Up slots are in use; choose one to replace"),
+                    )
+                })?,
+            };
+            let session_id = selection::start_session(tx, slot, SelectionMode::Manual, None)?;
+            let attempt_id =
+                selection::record_attempt(tx, &session_id, &edition_id, SelectionSource::Manual)?;
+            Ok(Shown {
+                slot,
+                attempt_id,
+                session_id,
+                album_id,
+                edition_id,
+                source: SelectionSource::Manual,
+            })
+        },
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -403,6 +509,7 @@ pub struct MatchedBy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CurrentPick {
+    pub slot: i64,
     pub attempt_id: String,
     pub session_id: String,
     pub album_id: String,
@@ -423,16 +530,28 @@ pub struct PoolView {
     pub method: Method,
     pub pool_cycle: i64,
     pub pool_size: usize,
-    /// Eligible albums not yet shown this cycle.
+    /// Eligible albums not yet shown this cycle (other slots' picks excluded).
     pub remaining: usize,
     pub exhausted: bool,
+}
+
+/// One slot: its current pick, its picking method and pool, or both.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SlotState {
+    pub slot: i64,
+    pub current: Option<CurrentPick>,
+    pub session: Option<PoolView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NextUpState {
-    pub current: Option<CurrentPick>,
-    pub session: Option<PoolView>,
+    /// Slots in use, in slot order; free slots are omitted.
+    pub slots: Vec<SlotState>,
+    pub max_slots: i64,
+    /// Where a new pick goes; `None` when every slot is in use.
+    pub next_free_slot: Option<i64>,
 }
 
 fn matched_by(method: Option<Method>, item: &ListItem, current_year: i32) -> MatchedBy {
@@ -485,74 +604,104 @@ fn matched_by(method: Option<Method>, item: &ListItem, current_year: i32) -> Mat
     }
 }
 
-/// The current pick (revalidated against today's list and tags) and the open pool.
-/// Reading state never rolls.
+/// Every slot in use: its pick (revalidated against today's list and tags) and its open
+/// pool. Reading state never rolls.
 pub fn state(conn: &Connection, current_year: i32) -> AppResult<NextUpState> {
     let all = candidates(conn)?;
-    let current = match selection::current_selection(conn)? {
-        None => None,
-        Some(c) => {
-            let (shown_at, mode, criteria): (String, String, Option<String>) = conn.query_row(
-                "SELECT a.shown_at, s.mode, s.criteria
-                 FROM selection_attempt a JOIN selection_session s ON s.id = a.session_id
-                 WHERE a.id = ?1",
-                params![c.attempt_id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-            )?;
-            let method = method_of(&mode, criteria)?;
-            let listed = all.iter().find(|x| x.album_id == c.album_id);
-            let eligibility = match (listed, &method) {
-                (None, _) => Eligibility::NotOnListenList,
-                (Some(l), _) if l.edition_id != c.edition_id => Eligibility::EditionChanged,
-                (Some(l), Some(m)) if !picker::allows(m, l, current_year) => {
-                    Eligibility::NoLongerMatches
-                }
-                _ => Eligibility::Eligible,
-            };
-            let item = listing::item(conn, &c.edition_id)?;
-            Some(CurrentPick {
-                matched: matched_by(method, &item, current_year),
-                item,
-                attempt_id: c.attempt_id,
-                session_id: c.session_id,
-                album_id: c.album_id,
-                edition_id: c.edition_id,
-                source: c.source,
-                status: c.status,
-                shown_at,
-                eligibility,
-            })
+    let mut picks = selection::current_selections(conn)?;
+    let mut slots = Vec::new();
+    for slot in used_slots(conn)? {
+        let current = match picks.iter().position(|c| c.slot == slot) {
+            Some(i) => Some(current_pick(
+                conn,
+                &all,
+                picks.swap_remove(i),
+                current_year,
+            )?),
+            None => None,
+        };
+        let session = match open_session(conn, slot)? {
+            None => None,
+            Some(open) => {
+                let taken = taken_elsewhere(conn, slot)?;
+                let pool: Vec<_> = picker::eligible(&open.method, &all, current_year)
+                    .into_iter()
+                    .filter(|c| !taken.contains(&c.album_id))
+                    .collect();
+                let seen = seen(conn, &open.id, open.pool_cycle)?;
+                let remaining = pool.iter().filter(|c| !seen.contains(&c.album_id)).count();
+                Some(PoolView {
+                    session_id: open.id,
+                    method: open.method,
+                    pool_cycle: open.pool_cycle,
+                    pool_size: pool.len(),
+                    remaining,
+                    exhausted: !pool.is_empty() && remaining == 0,
+                })
+            }
+        };
+        // A slot whose only session is unreadable shows as free.
+        if current.is_some() || session.is_some() {
+            slots.push(SlotState {
+                slot,
+                current,
+                session,
+            });
         }
-    };
-    let session = match open_session(conn)? {
-        None => None,
-        Some(open) => {
-            let pool = picker::eligible(&open.method, &all, current_year);
-            let seen = seen(conn, &open.id, open.pool_cycle)?;
-            let remaining = pool.iter().filter(|c| !seen.contains(&c.album_id)).count();
-            Some(PoolView {
-                session_id: open.id,
-                method: open.method,
-                pool_cycle: open.pool_cycle,
-                pool_size: pool.len(),
-                remaining,
-                exhausted: !pool.is_empty() && remaining == 0,
-            })
-        }
-    };
-    Ok(NextUpState { current, session })
+    }
+    let used: Vec<i64> = slots.iter().map(|s| s.slot).collect();
+    Ok(NextUpState {
+        slots,
+        max_slots: MAX_SLOTS,
+        next_free_slot: (1..=MAX_SLOTS).find(|s| !used.contains(s)),
+    })
 }
 
-/// Clear the current pick without listening: it counts as rejected in its pool and
-/// nothing replaces it. Returns whether there was a pick.
-pub fn clear(tx: &Transaction<'_>) -> AppResult<bool> {
-    tx.execute(
-        "UPDATE selection_attempt SET status = 'skipped',
-             resolved_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE status = 'shown' AND id IN (SELECT attempt_id FROM current_selection)",
-        [],
+fn current_pick(
+    conn: &Connection,
+    all: &[Candidate],
+    c: selection::CurrentSelection,
+    current_year: i32,
+) -> AppResult<CurrentPick> {
+    let (shown_at, mode, criteria): (String, String, Option<String>) = conn.query_row(
+        "SELECT a.shown_at, s.mode, s.criteria
+         FROM selection_attempt a JOIN selection_session s ON s.id = a.session_id
+         WHERE a.id = ?1",
+        params![c.attempt_id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
-    Ok(tx.execute("DELETE FROM current_selection", [])? > 0)
+    let method = method_of(&mode, criteria)?;
+    let listed = all.iter().find(|x| x.album_id == c.album_id);
+    let eligibility = match (listed, &method) {
+        (None, _) => Eligibility::NotOnListenList,
+        (Some(l), _) if l.edition_id != c.edition_id => Eligibility::EditionChanged,
+        (Some(l), Some(m)) if !picker::allows(m, l, current_year) => Eligibility::NoLongerMatches,
+        _ => Eligibility::Eligible,
+    };
+    let item = listing::item(conn, &c.edition_id)?;
+    Ok(CurrentPick {
+        matched: matched_by(method, &item, current_year),
+        item,
+        slot: c.slot,
+        attempt_id: c.attempt_id,
+        session_id: c.session_id,
+        album_id: c.album_id,
+        edition_id: c.edition_id,
+        source: c.source,
+        status: c.status,
+        shown_at,
+        eligibility,
+    })
+}
+
+/// Remove `slot` without listening: its pick counts as rejected in its pool, its picking
+/// method is closed, and nothing replaces it. Other slots are untouched. Returns whether
+/// the slot was in use.
+pub fn clear(tx: &Transaction<'_>, slot: i64) -> AppResult<bool> {
+    let slot = check_slot(slot)?;
+    let had_pick = selection::clear_current_selection(tx, slot)?;
+    let had_session = selection::end_open_session(tx, slot)?;
+    Ok(had_pick || had_session)
 }
 
 /// A choice with how many Listen List albums it would match given the *other*
@@ -603,6 +752,9 @@ pub struct GuidedOptions {
     /// Listen List albums matching `criteria` exactly (never relaxed).
     pub match_count: usize,
     pub listen_asap: usize,
+    /// Whether the built-in Listen ASAP tag still exists (the user may delete it). Without it
+    /// Weighted Random has nothing to pick from.
+    pub listen_asap_tag: bool,
     pub total: usize,
 }
 
@@ -704,6 +856,7 @@ pub fn options(
         });
     }
 
+    let listen_asap_tag = tags.iter().any(|t| t.builtin);
     Ok(GuidedOptions {
         decades,
         current_year: current_year_option,
@@ -712,6 +865,7 @@ pub fn options(
         tags,
         match_count: count_with(&|_: &mut GuidedCriteria| {}),
         listen_asap: all.iter().filter(|c| c.listen_asap).count(),
+        listen_asap_tag,
         total: all.len(),
     })
 }

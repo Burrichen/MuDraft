@@ -15,16 +15,17 @@ use super::{Table, require, required_text};
 use crate::domain::ids::{new_id, parse_uuid};
 use crate::error::{AppError, AppResult};
 use crate::metadata::clock::utc_now;
-use crate::metadata::{EditionCandidate, ReleaseDetail, ReleaseGroupPage, credit_text};
+use crate::metadata::{
+    EditionCandidate, ReleaseDetail, ReleaseGroupPage, credit_text, unsupported_release_type,
+};
 
 pub const PRIMARY_TYPES: &[&str] = &["Album", "EP", "Single", "Broadcast", "Other"];
+/// Choosable secondary types. Interviews, audiobooks, and audio dramas are out of scope
+/// (`metadata::UNSUPPORTED_SECONDARY_TYPES`): never stored, shown, or counted.
 pub const SECONDARY_TYPES: &[&str] = &[
     "Compilation",
     "Soundtrack",
     "Spokenword",
-    "Interview",
-    "Audiobook",
-    "Audio drama",
     "Live",
     "Remix",
     "DJ-mix",
@@ -32,6 +33,24 @@ pub const SECONDARY_TYPES: &[&str] = &[
     "Demo",
     "Field recording",
 ];
+
+/// Library albums the fetched catalogue doesn't contain count toward progress unless their
+/// release group is a single or a live recording (songs from a single that are on an album
+/// still count through that album). Albums whose type was never recorded count, as before.
+fn library_album_counts(raw: &RawEntry) -> bool {
+    if !raw.type_known {
+        return true;
+    }
+    let single = raw
+        .primary_type
+        .as_deref()
+        .is_some_and(|p| p.eq_ignore_ascii_case("Single"));
+    let live = raw
+        .secondary_types
+        .iter()
+        .any(|s| s.eq_ignore_ascii_case("Live"));
+    !single && !live
+}
 
 /// Which release-group types count toward progress. An entry counts when its primary type
 /// is listed and every one of its secondary types is listed too.
@@ -57,7 +76,7 @@ fn known_type(field: &'static str, allowed: &[&str], raw: &str) -> AppResult<Str
         .iter()
         .find(|t| t.eq_ignore_ascii_case(raw.trim()))
         .map(|t| (*t).to_owned())
-        .ok_or_else(|| AppError::validation(field, format!("“{raw}” isn't a MusicBrainz type")))
+        .ok_or_else(|| AppError::validation(field, format!("“{raw}” isn't a known release type")))
 }
 
 impl Scope {
@@ -108,8 +127,8 @@ impl Scope {
             )
         };
         format!(
-            "Counting MusicBrainz release groups of type {primary} {secondary}, from the official \
-             catalogue MusicBrainz shows on its artist page, including collaborations. Each album \
+            "Counting albums of type {primary} {secondary} from the artist's official online \
+             catalogue, including collaborations. Each album \
              counts once however many editions exist. Albums in your library that aren't in this \
              catalogue are counted too; entries you exclude are not."
         )
@@ -199,7 +218,11 @@ pub fn record_page(
     page: &ReleaseGroupPage,
     fetched_at: &str,
 ) -> AppResult<bool> {
-    for rg in &page.release_groups {
+    for rg in page
+        .release_groups
+        .iter()
+        .filter(|rg| !unsupported_release_type(&rg.secondary_types))
+    {
         let secondary = serde_json::to_string(&rg.secondary_types)
             .map_err(|e| AppError::Internal(format!("cannot encode types: {e}")))?;
         let parts: Vec<StoredCredit> = rg
@@ -304,7 +327,7 @@ pub fn record_representative(
         .map_err(|e| AppError::Internal(format!("cannot encode formats: {e}")))?;
     let error = chosen
         .is_none()
-        .then_some("MusicBrainz lists no release with a tracklist for this album");
+        .then_some("No release with a tracklist is listed for this album");
     tx.execute(
         "INSERT INTO catalogue_reference (musicbrainz_release_group_id, musicbrainz_release_id, title,
              release_date, country, formats, editions_considered, editions_fetched_at, last_error)
@@ -721,6 +744,8 @@ struct RawEntry {
     original_year: Option<i64>,
     primary_type: Option<String>,
     secondary_types: Vec<String>,
+    /// False for a library album whose release-group type was never recorded.
+    type_known: bool,
     excluded: bool,
     fetched_at: Option<String>,
     credit_parts: String,
@@ -869,6 +894,7 @@ fn raw_entries(conn: &Connection, artist_id: &str) -> AppResult<Vec<RawEntry>> {
             original_year: r.get(8)?,
             primary_type: r.get(9)?,
             secondary_types: serde_json::from_str(&secondary).unwrap_or_default(),
+            type_known: true,
             excluded: r.get(11)?,
             fetched_at: r.get(12)?,
             credit_parts: r.get(13)?,
@@ -887,7 +913,8 @@ fn raw_entries(conn: &Connection, artist_id: &str) -> AppResult<Vec<RawEntry>> {
                 (SELECT group_concat(COALESCE(c2.credited_name, ar.name) || c2.join_phrase, '' ORDER BY c2.position)
                  FROM album_artist_credit c2 JOIN artist ar ON ar.id = c2.artist_id
                  WHERE c2.album_id = a.id),
-                (SELECT COUNT(*) FROM album_artist_credit c3 WHERE c3.album_id = a.id)
+                (SELECT COUNT(*) FROM album_artist_credit c3 WHERE c3.album_id = a.id),
+                a.primary_type, a.secondary_types
          FROM album a JOIN album_artist_credit c ON c.album_id = a.id
          WHERE c.artist_id = ?1",
     )?;
@@ -902,8 +929,12 @@ fn raw_entries(conn: &Connection, artist_id: &str) -> AppResult<Vec<RawEntry>> {
             credit: r.get::<_, Option<String>>(4)?.unwrap_or_default(),
             credit_artists: r.get(5)?,
             disambiguation: None,
-            primary_type: None,
-            secondary_types: vec![],
+            primary_type: r.get(6)?,
+            secondary_types: r
+                .get::<_, Option<String>>(7)?
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default(),
+            type_known: r.get::<_, Option<String>>(7)?.is_some(),
             excluded: false,
             fetched_at: None,
             credit_parts: "[]".into(),
@@ -1035,7 +1066,7 @@ fn reference_for(conn: &Connection, raw: &RawEntry) -> AppResult<(Reference, Vec
                     formats: serde_json::from_str(&formats).unwrap_or_default(),
                     track_count: count.map(|c| c as u32),
                     note: format!(
-                        "Representative of {considered} MusicBrainz editions (you have none of this album)."
+                        "Representative of {considered} editions listed online (you have none of this album)."
                     ),
                     last_error: error,
                 },
@@ -1114,16 +1145,24 @@ pub fn catalogue(conn: &Connection, artist_id: &str) -> AppResult<ArtistCatalogu
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?)),
         )
         .optional()?;
-    let scope: Scope = state
+    let mut scope: Scope = state
         .as_ref()
         .and_then(|s| s.7.as_deref())
         .and_then(|j| serde_json::from_str(j).ok())
         .unwrap_or_default();
+    // Saved before interviews, audiobooks, and audio dramas left the choosable types.
+    scope
+        .secondary_types
+        .retain(|t| SECONDARY_TYPES.contains(&t.as_str()));
 
     let evidence = heard(conn)?;
     let mut entries = Vec::new();
     let mut identities: Vec<Vec<TrackIdentity>> = Vec::new();
     for raw in raw_entries(conn, &artist_id)? {
+        // Interviews, audiobooks, and audio dramas are out of scope: never shown or counted.
+        if unsupported_release_type(&raw.secondary_types) {
+            continue;
+        }
         let (reference, tracks) = reference_for(conn, &raw)?;
         let progress = reference.track_count.map(|_| {
             let mut seen: HashMap<String, bool> = HashMap::new();
@@ -1146,9 +1185,11 @@ pub fn catalogue(conn: &Connection, artist_id: &str) -> AppResult<ArtistCatalogu
             )?,
             None => (false, false, false),
         };
-        // Library albums outside the catalogue have no known type; they count by default.
-        let in_scope = raw.source == EntrySource::Library
-            || scope.counts(raw.primary_type.as_deref(), &raw.secondary_types);
+        let in_scope = if raw.source == EntrySource::Library {
+            library_album_counts(&raw)
+        } else {
+            scope.counts(raw.primary_type.as_deref(), &raw.secondary_types)
+        };
         let score = match &raw.album_id {
             Some(a) => ratings::album_score(conn, a)?,
             None => None,
@@ -1167,10 +1208,13 @@ pub fn catalogue(conn: &Connection, artist_id: &str) -> AppResult<ArtistCatalogu
             credit: raw.credit,
             collaboration: raw.credit_artists > 1,
             original_year: raw.original_year,
-            type_label: if raw.source == EntrySource::Library {
-                "In your library (type unknown)".into()
-            } else {
-                type_label(raw.primary_type.as_deref(), &raw.secondary_types)
+            type_label: match raw.source {
+                EntrySource::Library if !raw.type_known => "In your library (type unknown)".into(),
+                EntrySource::Library => format!(
+                    "{} · in your library",
+                    type_label(raw.primary_type.as_deref(), &raw.secondary_types)
+                ),
+                _ => type_label(raw.primary_type.as_deref(), &raw.secondary_types),
             },
             primary_type: raw.primary_type,
             secondary_types: raw.secondary_types,
@@ -1273,9 +1317,10 @@ pub fn catalogue(conn: &Connection, artist_id: &str) -> AppResult<ArtistCatalogu
             manual_entries,
             tracklists_known: known as u32,
             tracklists_needed: counted.len() as u32,
-            note: "This artist isn't linked to MusicBrainz, so only albums in your library and \
+            note:
+                "This artist isn't linked to online metadata, so only albums in your library and \
                    ones you add are known. This is not a complete catalogue."
-                .into(),
+                    .into(),
         },
         (Some(id), s) => {
             let same = s.as_ref().and_then(|s| s.0.as_deref()) == Some(id.as_str());
@@ -1292,14 +1337,14 @@ pub fn catalogue(conn: &Connection, artist_id: &str) -> AppResult<ArtistCatalogu
             let total = s.and_then(|s| s.1).map(|t| t as u32);
             let note = match status {
                 CoverageStatus::Complete => {
-                    "The official MusicBrainz catalogue was fetched in full.".to_owned()
+                    "The official online catalogue was fetched in full.".to_owned()
                 }
                 CoverageStatus::Partial => format!(
-                    "Only part of the MusicBrainz catalogue has been fetched ({next_offset} of {}). \
+                    "Only part of the online catalogue has been fetched ({next_offset} of {}). \
                      Progress covers what is known so far.",
                     total.map_or("an unknown number".into(), |t| t.to_string())
                 ),
-                _ => "The MusicBrainz catalogue hasn't been fetched yet; only albums in your \
+                _ => "The online catalogue hasn't been fetched yet; only albums in your \
                       library are known."
                     .to_owned(),
             };

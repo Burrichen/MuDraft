@@ -17,6 +17,14 @@ pub struct TableSpec {
     pub collection: &'static [&'static str],
     /// Columns that only change together (a date and its precision, a status and its time).
     pub groups: &'static [&'static [&'static str]],
+    /// Provider data and fetch bookkeeping, not user edits: when both computers changed
+    /// one, the newer fetch wins (by `fetch_stamps`, then content) without asking.
+    pub fetched: &'static [&'static str],
+    /// Columns ordering two fetches, most significant first (`NULL` sorts oldest).
+    pub fetch_stamps: &'static [&'static str],
+    /// Only rows where this column holds this value are fetched data (the rest, e.g.
+    /// manual catalogue entries, are the user's own and conflict as usual).
+    pub fetched_when: Option<(&'static str, &'static str)>,
 }
 
 const fn table(name: &'static str) -> TableSpec {
@@ -25,8 +33,24 @@ const fn table(name: &'static str) -> TableSpec {
         filter: None,
         collection: &[],
         groups: &[],
+        fetched: &[],
+        fetch_stamps: &[],
+        fetched_when: None,
     }
 }
+
+/// Fetched catalogue columns (`catalogue_entry` rows from MusicBrainz).
+const ENTRY_FETCHED: &[&str] = &[
+    "title",
+    "disambiguation",
+    "primary_type",
+    "secondary_types",
+    "original_date",
+    "original_year",
+    "credit",
+    "credit_artists",
+    "credit_parts",
+];
 
 /// Portable preferences. Window/device state (sidebar, last route) and the artwork
 /// download consent stay per computer.
@@ -39,7 +63,7 @@ pub fn portable_setting(key: &str) -> bool {
 }
 
 /// Synced tables, parents before children. Excluded: caches (`metadata_cache`, downloaded
-/// artwork, discovered discographies), CSV staging, idempotency keys, sync bookkeeping.
+/// artwork), CSV staging, idempotency keys, sync bookkeeping.
 pub const SPECS: &[TableSpec] = &[
     table("artist"),
     table("genre"),
@@ -103,9 +127,51 @@ pub const SPECS: &[TableSpec] = &[
         groups: &[&["source", "asset", "mime", "bytes"]],
         ..table("artwork")
     },
+    // Discovered discographies sync too, so every computer shows the same progress
+    // without refetching. Fetch bookkeeping and provider data never ask the user;
+    // `scope` and `excluded` are the user's choices and merge like any edit.
     TableSpec {
-        filter: Some("source = 'manual'"),
+        fetched: &[
+            "musicbrainz_artist_id",
+            "provider_total",
+            "next_offset",
+            "page_fetched_at",
+            "completed_at",
+            "last_error",
+        ],
+        fetch_stamps: &["completed_at", "page_fetched_at"],
+        ..table("artist_catalogue")
+    },
+    TableSpec {
+        fetched: ENTRY_FETCHED,
+        fetch_stamps: &["fetched_at"],
+        fetched_when: Some(("source", "musicbrainz")),
         ..table("catalogue_entry")
+    },
+    TableSpec {
+        fetched: &[
+            "musicbrainz_release_id",
+            "title",
+            "release_date",
+            "country",
+            "formats",
+            "editions_considered",
+            "editions_fetched_at",
+            "track_count",
+            "tracks_fetched_at",
+            "last_error",
+        ],
+        fetch_stamps: &["editions_fetched_at", "tracks_fetched_at"],
+        ..table("catalogue_reference")
+    },
+    TableSpec {
+        fetched: &[
+            "title",
+            "length_ms",
+            "musicbrainz_track_id",
+            "musicbrainz_recording_id",
+        ],
+        ..table("catalogue_track")
     },
     table("imported_row"),
 ];
@@ -165,6 +231,11 @@ pub struct TableSchema {
     pub meta: Vec<bool>,
     /// Merge units over the non-meta columns: each group, then every other column alone.
     pub units: Vec<Vec<usize>>,
+    /// Fetched columns (see [`TableSpec::fetched`]), their ordering stamps, and the
+    /// row condition that makes them fetched.
+    pub fetched: Vec<usize>,
+    pub fetch_stamps: Vec<usize>,
+    pub fetched_when: Option<(usize, String)>,
     pub collection: Vec<usize>,
     pub fks: Vec<ForeignKey>,
     pub uniques: Vec<Unique>,
@@ -252,6 +323,20 @@ fn load_table(conn: &Connection, spec: &TableSpec) -> AppResult<TableSchema> {
         .iter()
         .map(|c| pos(c))
         .collect::<AppResult<Vec<_>>>()?;
+    let fetched = spec
+        .fetched
+        .iter()
+        .map(|c| pos(c))
+        .collect::<AppResult<Vec<_>>>()?;
+    let fetch_stamps = spec
+        .fetch_stamps
+        .iter()
+        .map(|c| pos(c))
+        .collect::<AppResult<Vec<_>>>()?;
+    let fetched_when = spec
+        .fetched_when
+        .map(|(c, v)| Ok::<_, AppError>((pos(c)?, v.to_owned())))
+        .transpose()?;
 
     let mut fks: Vec<ForeignKey> = Vec::new();
     if name != "artwork" {
@@ -344,8 +429,22 @@ fn load_table(conn: &Connection, spec: &TableSpec) -> AppResult<TableSchema> {
         pk,
         meta,
         units,
+        fetched,
+        fetch_stamps,
+        fetched_when,
         collection,
         fks,
         uniques,
     })
+}
+
+impl TableSchema {
+    /// Whether `row`'s fetched columns are provider data (re-fetchable, never asked about).
+    pub fn is_fetched_row(&self, row: &[serde_json::Value]) -> bool {
+        !self.fetched.is_empty()
+            && self
+                .fetched_when
+                .as_ref()
+                .is_none_or(|(c, v)| row[*c] == v.as_str())
+    }
 }

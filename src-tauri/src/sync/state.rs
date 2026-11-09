@@ -460,13 +460,12 @@ pub fn build_state(
         .values()
         .filter(|r| !r[builtin_col].is_null())
         .collect();
-    let builtin_ok = builtins.len() == 1
-        && builtins[0][builtin_col] == "listen_asap"
-        && tag
-            .col("id")
-            .is_some_and(|i| builtins[0][i] == LISTEN_ASAP_TAG_ID);
+    // Listen ASAP may have been deleted; if present it must be the one built-in tag.
+    let builtin_ok = builtins.iter().all(|b| {
+        b[builtin_col] == "listen_asap" && tag.col("id").is_some_and(|i| b[i] == LISTEN_ASAP_TAG_ID)
+    }) && builtins.len() <= 1;
     if !builtin_ok {
-        return Err(bad("the built-in Listen ASAP tag is missing or changed"));
+        return Err(bad("the built-in Listen ASAP tag has changed"));
     }
     for (table, keys) in tombstones {
         let ts = schema
@@ -492,11 +491,6 @@ fn check_row(ts: &TableSchema, row: &[Value]) -> AppResult<()> {
                 .is_some_and(portable_setting);
             if !ok {
                 return Err(bad("a setting that doesn't sync"));
-            }
-        }
-        "catalogue_entry" => {
-            if ts.col("source").map(|i| &row[i]) != Some(&Value::from("manual")) {
-                return Err(bad("a discovered catalogue entry"));
             }
         }
         "artwork" => {
