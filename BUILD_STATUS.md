@@ -7,6 +7,7 @@
   - Stats removed in the APK only; Liked takes its nav slot.
   - Android file picker (`commands/files.rs`), Keystore token, bundled-roots TLS (`net.rs`), update check opening the release APK, safe-area/back/keyboard handling.
   - Release workflow `android` job (only with signing secrets).
+  - `MuDraft_1.4.0_android.apk` attached to the published v1.4.0 release (built from `2d0de5d`), notes and `SHA256SUMS.txt` updated; signed with the release key kept in `~/.mudraft-android/` (not in git).
 
 ## Checks run
 
@@ -16,10 +17,10 @@
 ## Blockers
 
 - Not run: custom-artwork picker, add-album-by-search commit, a real GitHub sync, the update download, the `android` CI job, a real phone.
-- No release signing key yet (`docs/ANDROID.md`).
+- Back up `~/.mudraft-android/` (key + passwords) and add it as the `ANDROID_KEYSTORE_*` secrets, or CI APKs can't update the attached one.
 - Narrow screens: wide tables (CSV rows) are cramped.
 - First real in-app update (1.4.0 → next) unverified; `docs/RELEASE_BLOCKERS.md` items pending.
 
 ## Next step
 
-Create the signing key and secrets, run the Release workflow, test on a real phone, then merge `apk`.
+Back up the key and add the secrets, test the APK on a real phone, then merge `apk`.
