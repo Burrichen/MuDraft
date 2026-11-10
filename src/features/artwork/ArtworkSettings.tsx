@@ -11,6 +11,7 @@ import {
 import { useLibraryVersion } from "../../services/libraryEvents";
 import { ArtworkExplanation } from "./ArtworkConsent";
 import { formatBytes } from "./formatBytes";
+import { DEVICE } from "../../app/platform";
 
 /** Settings → Artwork: the download preference and a separate cache-clear action. */
 export function ArtworkSettings() {
@@ -157,7 +158,7 @@ export function ArtworkSettings() {
           </>
         }
       >
-        Downloaded covers are deleted from this computer. Images you added yourself stay. Covers are
+        Downloaded covers are deleted from this {DEVICE}. Images you added yourself stay. Covers are
         downloaded again when needed if downloads are on.
       </Dialog>
     </section>

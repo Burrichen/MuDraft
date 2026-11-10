@@ -1,8 +1,10 @@
 //! Narrow IPC surface. Each command validates its own inputs and returns `AppError` on failure.
 
 pub mod album;
+pub mod app_update;
 pub mod csv_import;
 pub mod discography;
+pub mod files;
 pub mod library;
 pub mod listening;
 pub mod metadata;

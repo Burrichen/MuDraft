@@ -1,11 +1,9 @@
 //! CSV import commands. Files are chosen with native dialogs and read here in Rust; the
 //! renderer never receives a path or file-system access.
 
-use std::path::PathBuf;
-
 use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
 
+use super::files;
 use super::metadata::MetadataService;
 use crate::csv_import::commit::{self, CommitReport, TagDecisions};
 use crate::csv_import::enrich::{self, EnrichProgress};
@@ -18,46 +16,21 @@ use crate::domain::ids::parse_uuid;
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
-async fn pick(app: &AppHandle, save_as: Option<&str>) -> AppResult<Option<PathBuf>> {
-    #[cfg(feature = "e2e")]
-    if let Some(p) = crate::e2e::dialog_path(if save_as.is_some() { "template" } else { "csv" }) {
-        return Ok(Some(p));
-    }
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let dialog = app.dialog().file().add_filter("CSV", &["csv"]);
-    let done = move |p: Option<tauri_plugin_dialog::FilePath>| {
-        let _ = tx.send(p);
-    };
-    match save_as {
-        Some(name) => dialog.set_file_name(name).save_file(done),
-        None => dialog.set_title("Import albums from CSV").pick_file(done),
-    }
-    let chosen = rx
-        .await
-        .map_err(|_| AppError::Internal("file dialog closed unexpectedly".into()))?;
-    chosen
-        .map(|p| {
-            p.into_path()
-                .map_err(|e| AppError::validation("file", e.to_string()))
-        })
-        .transpose()
-}
-
-fn file_name(path: &std::path::Path) -> String {
-    path.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "import.csv".into())
-}
+const CSV_FILTER: (&str, &[&str]) = ("CSV", &["csv"]);
 
 /// Save the header-only template. Returns the saved file name, or None if cancelled.
 #[tauri::command]
 pub async fn csv_import_save_template(app: AppHandle) -> AppResult<Option<String>> {
-    let Some(path) = pick(&app, Some("mudraft-import-template.csv")).await? else {
+    let Some(target) =
+        files::pick_save(&app, "template", "mudraft-import-template.csv", CSV_FILTER).await?
+    else {
         return Ok(None);
     };
-    std::fs::write(&path, template_csv())
+    std::fs::write(target.path(), template_csv())
         .map_err(|e| AppError::validation("file", format!("couldn't save the template: {e}")))?;
-    Ok(Some(file_name(&path)))
+    let name = target.name().to_owned();
+    target.finish()?;
+    Ok(Some(name))
 }
 
 /// Choose and stage a CSV file. Nothing in the library changes.
@@ -66,9 +39,19 @@ pub async fn csv_import_open(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<Option<SessionSummary>> {
-    let Some(path) = pick(&app, None).await? else {
+    let Some(file) = files::pick_open(
+        &app,
+        "csv",
+        "Import albums from CSV",
+        CSV_FILTER,
+        MAX_FILE_BYTES as u64,
+        "import.csv",
+    )
+    .await?
+    else {
         return Ok(None);
     };
+    let path = file.path().to_path_buf();
     let size = std::fs::metadata(&path)
         .map_err(|e| AppError::validation("file", e.to_string()))?
         .len();
@@ -86,7 +69,7 @@ pub async fn csv_import_open(
     let parsed = tokio::task::spawn_blocking(move || parse::parse(&bytes))
         .await
         .map_err(|e| AppError::Internal(e.to_string()))??;
-    let name = file_name(&path);
+    let name = file.name().to_owned();
     let summary = state.with_db(|db| {
         db.write(|tx| {
             let id = staging::create_session(tx, &name, &parsed)?;

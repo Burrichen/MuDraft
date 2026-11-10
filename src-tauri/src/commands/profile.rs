@@ -2,12 +2,12 @@
 //! renderer only sees file names, previews, and a fingerprint to confirm.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
 
+use super::files::{self, PickedFile};
 use super::metadata::MetadataService;
 use crate::domain::ids::new_id;
 use crate::error::{AppError, AppResult};
@@ -20,7 +20,8 @@ use crate::state::AppState;
 /// The archive chosen for restore, waiting for confirmation.
 #[derive(Default)]
 pub struct ProfileImports {
-    pending: Mutex<Option<(PathBuf, String)>>,
+    /// The picked archive (on Android a temp copy, removed when dropped) and its fingerprint.
+    pending: Mutex<Option<(Arc<PickedFile>, String)>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -31,37 +32,7 @@ pub struct RestoreOutcome {
     pub preview: Preview,
 }
 
-async fn pick(app: &AppHandle, save_as: Option<String>) -> AppResult<Option<PathBuf>> {
-    #[cfg(feature = "e2e")]
-    if let Some(p) = crate::e2e::dialog_path(if save_as.is_some() {
-        "export"
-    } else {
-        "restore"
-    }) {
-        return Ok(Some(p));
-    }
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let dialog = app
-        .dialog()
-        .file()
-        .add_filter("MuDraft profile", &[EXTENSION]);
-    let done = move |p: Option<tauri_plugin_dialog::FilePath>| {
-        let _ = tx.send(p);
-    };
-    match save_as {
-        Some(name) => dialog.set_file_name(name).save_file(done),
-        None => dialog
-            .set_title("Restore a MuDraft profile")
-            .pick_file(done),
-    }
-    rx.await
-        .map_err(|_| AppError::Internal("file dialog closed unexpectedly".into()))?
-        .map(|p| {
-            p.into_path()
-                .map_err(|e| AppError::validation("file", e.to_string()))
-        })
-        .transpose()
-}
+const PROFILE_FILTER: (&str, &[&str]) = ("MuDraft profile", &[EXTENSION]);
 
 fn with_extension(path: PathBuf) -> PathBuf {
     if path
@@ -153,10 +124,18 @@ pub async fn profile_export(
     include_artwork: bool,
 ) -> AppResult<Option<ExportOutcome>> {
     let default = format!("mudraft-profile-{}.{EXTENSION}", &utc_now()[..10]);
-    let Some(path) = pick(&app, Some(default)).await? else {
+    let Some(target) = files::pick_save(&app, "export", &default, PROFILE_FILTER).await? else {
         return Ok(None);
     };
-    export_to(&state, &with_extension(path), include_artwork).map(Some)
+    let mut outcome = export_to(
+        &state,
+        &with_extension(target.path().to_path_buf()),
+        include_artwork,
+    )?;
+    // On Android the export was written to a temp file; report the chosen document's name.
+    outcome.file_name = target.name().to_owned();
+    target.finish()?;
+    Ok(Some(outcome))
 }
 
 /// Choose an archive and preview it (fully validated). Nothing changes yet.
@@ -166,12 +145,21 @@ pub async fn profile_import_choose(
     state: State<'_, AppState>,
     imports: State<'_, ProfileImports>,
 ) -> AppResult<Option<Preview>> {
-    let Some(path) = pick(&app, None).await? else {
+    let Some(file) = files::pick_open(
+        &app,
+        "restore",
+        "Restore a MuDraft profile",
+        PROFILE_FILTER,
+        crate::profile::MAX_ARCHIVE_BYTES,
+        "profile",
+    )
+    .await?
+    else {
         return Ok(None);
     };
-    let preview = inspect(&state, &path)?;
+    let preview = inspect(&state, file.path())?;
     if let Ok(mut pending) = imports.pending.lock() {
-        *pending = Some((path, preview.sha256.clone()));
+        *pending = Some((Arc::new(file), preview.sha256.clone()));
     }
     Ok(Some(preview))
 }
@@ -184,7 +172,7 @@ pub async fn profile_import_confirm(
     imports: State<'_, ProfileImports>,
     sha256: String,
 ) -> AppResult<RestoreOutcome> {
-    let (path, expected) = imports
+    let (file, expected) = imports
         .pending
         .lock()
         .map_err(|_| AppError::Internal("restore state poisoned".into()))?
@@ -195,7 +183,7 @@ pub async fn profile_import_confirm(
             "that isn't the profile you previewed".into(),
         ));
     }
-    let outcome = restore_from(Some(&service), &state, &path, &expected)?;
+    let outcome = restore_from(Some(&service), &state, file.path(), &expected)?;
     if let Ok(mut pending) = imports.pending.lock() {
         *pending = None;
     }

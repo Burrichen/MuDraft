@@ -28,6 +28,25 @@ beforeEach(() => {
 });
 
 describe("update prompt", () => {
+  it("on Android, downloads the new APK in the browser and closes the prompt", async () => {
+    const user = userEvent.setup();
+    const install = vi.fn<AvailableUpdate["install"]>(() => Promise.resolve());
+    vi.mocked(checkForUpdate).mockResolvedValue({ ...available(install), manual: true });
+    render(
+      <UpdateProvider autoCheck unavailable={null}>
+        <p>app</p>
+      </UpdateProvider>,
+    );
+    const dialog = await screen.findByRole("dialog", { name: "MuDraft 1.5.0 is available" });
+    expect(dialog).toHaveTextContent("open the downloaded file");
+    expect(within(dialog).queryByRole("button", { name: "Update and Restart" })).toBeNull();
+    await user.click(within(dialog).getByRole("button", { name: "Download Update" }));
+    expect(install).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+
   it("offers a newer version at startup with its patch notes, and installs on request", async () => {
     const user = userEvent.setup();
     let fail = true;

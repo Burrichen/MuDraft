@@ -35,6 +35,7 @@ import {
   type Recovery,
 } from "./syncText";
 import "./sync.css";
+import { DEVICE, DEVICES, SECURE_STORE } from "../../app/platform";
 
 type Busy = "connect" | "check" | "sync" | "token" | "disconnect";
 
@@ -67,8 +68,8 @@ function Steps() {
         </li>
         <li>Enter the owner (your GitHub user name), the repository, and the token below.</li>
         <li>
-          On your other computer, make a separate token the same way and connect it to the same
-          repository. Each computer keeps its own token; tokens are never synced.
+          On your other {DEVICE}, make a separate token the same way and connect it to the same
+          repository. Each {DEVICE} keeps its own token; tokens are never synced.
         </li>
       </ol>
       <p className="setting-hint">
@@ -173,14 +174,14 @@ export function SyncSettings() {
     if (c.sameSync === null)
       return {
         kind: "ok",
-        text: `Connected to ${where} (private). It holds a MuDraft library with ${plural(c.remote?.albums ?? 0, "album")}. Run the first sync to connect this computer.`,
+        text: `Connected to ${where} (private). It holds a MuDraft library with ${plural(c.remote?.albums ?? 0, "album")}. Run the first sync to connect this ${DEVICE}.`,
       };
     return {
       kind: "ok",
       text: `Connected to ${where} (private). ${
         isEmptySummary(c.remoteChanges)
           ? "No new changes on GitHub."
-          : `Changes on GitHub since this computer last synced: ${summaryText(c.remoteChanges)}.`
+          : `Changes on GitHub since this ${DEVICE} last synced: ${summaryText(c.remoteChanges)}.`
       }`,
     };
   };
@@ -301,7 +302,7 @@ export function SyncSettings() {
       return;
     }
     if (needToken && !token.trim()) {
-      setFormError("Paste the fine-grained token you created for this computer.");
+      setFormError(`Paste the fine-grained token you created for this ${DEVICE}.`);
       return;
     }
     setBusy("connect");
@@ -355,7 +356,7 @@ export function SyncSettings() {
       setReplacingToken(false);
       setNotice({
         kind: "ok",
-        text: "New token saved in this computer’s secure credential store.",
+        text: `New token saved in this ${DEVICE}’s secure credential store.`,
       });
     } catch (err) {
       fail(err);
@@ -370,7 +371,7 @@ export function SyncSettings() {
       setStatus(await removeSyncToken());
       setNotice({
         kind: "ok",
-        text: "Token removed from this computer. To revoke it completely, delete it on GitHub under Settings → Developer settings → Fine-grained tokens.",
+        text: `Token removed from this ${DEVICE}. To revoke it completely, delete it on GitHub under Settings → Developer settings → Fine-grained tokens.`,
       });
     } catch (err) {
       fail(err);
@@ -392,7 +393,7 @@ export function SyncSettings() {
       setConfirmDisconnect(false);
       setNotice({
         kind: "ok",
-        text: "This computer no longer syncs. Your library here and the data on GitHub are unchanged.",
+        text: `This ${DEVICE} no longer syncs. Your library here and the data on GitHub are unchanged.`,
       });
     } catch (err) {
       fail(err);
@@ -408,11 +409,11 @@ export function SyncSettings() {
     <div className="setting-row">
       <div className="setting-text">
         <label className="setting-label" htmlFor={tokenId}>
-          Access token for this computer
+          Access token for this {DEVICE}
         </label>
         <span id={tokenHint} className="setting-hint">
-          Starts with github_pat_. Saved only in this computer’s secure credential store (Keychain
-          on macOS, Credential Manager on Windows) and never shown again.
+          Starts with github_pat_. Saved only in this {DEVICE}’s secure credential store (
+          {SECURE_STORE}) and never shown again.
         </span>
       </div>
       <input
@@ -436,7 +437,7 @@ export function SyncSettings() {
         GitHub Sync
       </h2>
       <p className="setting-hint">
-        Keep this library the same on your computers through a private GitHub repository you own.
+        Keep this library the same on your {DEVICES} through a private GitHub repository you own.
         MuDraft syncs only when you choose Sync Now; it never syncs in the background.
       </p>
 
@@ -553,12 +554,12 @@ export function SyncSettings() {
             <dt>Token</dt>
             <dd>
               {status.hasToken
-                ? "Saved in this computer’s secure credential store"
-                : "None saved on this computer"}
+                ? `Saved in this ${DEVICE}’s secure credential store`
+                : `None saved on this ${DEVICE}`}
             </dd>
             <dt>Last successful sync</dt>
             <dd>{formatWhen(status.lastSyncedAt)}</dd>
-            <dt>Changes on this computer</dt>
+            <dt>Changes on this {DEVICE}</dt>
             <dd>
               {!status.linked
                 ? "Not synced yet"
@@ -610,7 +611,7 @@ export function SyncSettings() {
           <div className="page-actions">
             <Button
               variant="primary"
-              disabledReason={!status.hasToken ? "Add a token for this computer first" : working}
+              disabledReason={!status.hasToken ? `Add a token for this ${DEVICE} first` : working}
               onClick={() => void startSync()}
             >
               {busy === "sync"
@@ -640,7 +641,7 @@ export function SyncSettings() {
             )}
             {status.hasToken && (
               <Button variant="ghost" disabledReason={working} onClick={() => void removeToken()}>
-                Remove token from this computer
+                Remove token from this {DEVICE}
               </Button>
             )}
             <Button
@@ -739,7 +740,7 @@ export function SyncSettings() {
       />
       <Dialog
         open={confirmDisconnect}
-        title="Disconnect this computer?"
+        title={`Disconnect this ${DEVICE}?`}
         onClose={() => {
           setConfirmDisconnect(false);
         }}
@@ -759,7 +760,7 @@ export function SyncSettings() {
         }
       >
         <p>
-          This computer stops syncing with {repository || "the repository"}. Your library here and
+          This {DEVICE} stops syncing with {repository || "the repository"}. Your library here and
           the data on GitHub stay as they are
           {status?.pendingLocalChanges ? ", including changes not yet synced" : ""}. Connecting
           again later asks how to combine the libraries.
@@ -773,7 +774,7 @@ export function SyncSettings() {
               setAlsoRemoveToken(e.target.checked);
             }}
           />
-          Also remove the saved token from this computer
+          Also remove the saved token from this {DEVICE}
         </label>
       </Dialog>
     </section>

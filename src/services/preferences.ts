@@ -1,3 +1,4 @@
+import { STATS_ENABLED } from "../app/platform";
 import { callNative, NativeError } from "../transport/native";
 
 export type AlbumLayout = "grid" | "list";
@@ -32,9 +33,16 @@ export const DEFAULT_PREFERENCES: UiPreferences = {
   showArtwork: true,
 };
 
-/** The page a fresh launch opens. */
-export function startRoute(p: UiPreferences): string {
-  return p.startPage === "last" ? p.lastRoute : p.startPage;
+/** Start pages offered in Settings; without Stats (Android) that one is left out. */
+export function startPagesFor(statsEnabled: boolean): readonly StartPage[] {
+  return statsEnabled ? START_PAGES : START_PAGES.filter((p) => p !== "/stats");
+}
+
+/** The page a fresh launch opens. A stored Stats route (e.g. from a synced desktop profile)
+ * opens Listen List when this build has no Stats; the stored value itself is left alone. */
+export function startRoute(p: UiPreferences, statsEnabled: boolean = STATS_ENABLED): string {
+  const route = p.startPage === "last" ? p.lastRoute : p.startPage;
+  return route === "/stats" && !statsEnabled ? "/listen-list" : route;
 }
 
 const PRIMARY_ROUTES = new Set(["/listen-list", "/next-up", "/collection", "/stats", "/settings"]);

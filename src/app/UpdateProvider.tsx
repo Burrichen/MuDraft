@@ -52,6 +52,10 @@ function UpdateDialog({ update, onLater }: { update: AvailableUpdate; onLater: (
       .install((fraction) => {
         setInstall({ kind: "running", fraction });
       })
+      .then(() => {
+        // Android only resolves: the download is in the browser, so there is nothing to wait for.
+        if (update.manual) onLater();
+      })
       .catch((err: unknown) => {
         setInstall({ kind: "error", message: message(err) });
       });
@@ -74,7 +78,11 @@ function UpdateDialog({ update, onLater }: { update: AvailableUpdate; onLater: (
             disabledReason={running ? "Updating…" : undefined}
             onClick={start}
           >
-            {install.kind === "error" ? "Try Again" : "Update and Restart"}
+            {install.kind === "error"
+              ? "Try Again"
+              : update.manual
+                ? "Download Update"
+                : "Update and Restart"}
           </Button>
         </>
       }
@@ -82,6 +90,8 @@ function UpdateDialog({ update, onLater }: { update: AvailableUpdate; onLater: (
       <p>
         You have MuDraft {update.currentVersion}. Your library is kept, and it’s backed up before
         the new version changes anything.
+        {update.manual &&
+          " The new version downloads in your browser; open the downloaded file and choose Install to update."}
       </p>
       {update.notes && (
         <>

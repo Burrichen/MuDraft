@@ -10,6 +10,7 @@ import {
   type ProfilePreview,
 } from "../../services/profile";
 import { formatBytes } from "../artwork/formatBytes";
+import { DEVICE } from "../../app/platform";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${String(n)} ${n === 1 ? one : many}`;
 
@@ -59,7 +60,7 @@ export function ProfileSettings() {
           out.artwork === "omitted" ? ", without artwork" : ""
         }.${
           out.artworkMissing > 0
-            ? ` ${plural(out.artworkMissing, "image")} missing from this computer ${out.artworkMissing === 1 ? "was" : "were"} left out.`
+            ? ` ${plural(out.artworkMissing, "image")} missing from this ${DEVICE} ${out.artworkMissing === 1 ? "was" : "were"} left out.`
             : ""
         }`,
       );
@@ -105,7 +106,7 @@ export function ProfileSettings() {
       </h2>
       <p className="setting-hint">
         A profile file holds your whole library — albums, lists, listens, ratings, reviews, tags,
-        Next Up history, catalogues, and settings — and works on any computer running MuDraft.
+        Next Up history, catalogues, and settings — and works on any {DEVICE} running MuDraft.
       </p>
       <div className="setting-row">
         <div className="setting-text">

@@ -1,5 +1,5 @@
-//! The GitHub token, one per computer, kept only in the OS secure store: macOS Keychain or
-//! Windows Credential Manager (local persistence, so it doesn't roam with a domain
+//! The GitHub token, one per computer, kept only in the OS secure store: macOS Keychain,
+//! Windows Credential Manager, or the Android Keystore (local persistence, so it doesn't roam with a domain
 //! profile). It is read in Rust when a request needs it and never sent to the renderer,
 //! written to SQLite, exports, logs, or error messages.
 
@@ -34,9 +34,15 @@ pub fn validate_token(raw: &str) -> AppResult<String> {
     Ok(token.to_owned())
 }
 
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "android"))]
 const ACCOUNT: &str = "github-token";
 
 pub struct OsSecretStore {
+    // Unused where no secure store is wired up (Android, Linux).
+    #[cfg_attr(
+        not(any(target_os = "macos", target_os = "windows", target_os = "android")),
+        allow(dead_code)
+    )]
     service: String,
 }
 
@@ -74,7 +80,13 @@ impl OsSecretStore {
                 .build(&self.service, ACCOUNT, Some(&local))
                 .map_err(describe)
         }
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        #[cfg(target_os = "android")]
+        {
+            use keyring_core::api::CredentialStoreApi as _;
+            let store = android_native_keyring_store::Store::new().map_err(describe)?;
+            store.build(&self.service, ACCOUNT, None).map_err(describe)
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
         {
             Err(AppError::StorageUnavailable(
                 "no secure credential store is available on this platform".into(),

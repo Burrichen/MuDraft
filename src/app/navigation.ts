@@ -1,4 +1,5 @@
 import type { IconName } from "../components/Icon";
+import { STATS_ENABLED } from "./platform";
 
 export interface NavItem {
   path: string;
@@ -6,14 +7,23 @@ export interface NavItem {
   icon: IconName;
 }
 
-/** The primary sections. Album, Artist, and Liked (opened from Stats) are not listed here. */
-export const NAV_ITEMS: readonly NavItem[] = [
-  { path: "/listen-list", label: "Listen List", icon: "listenList" },
-  { path: "/next-up", label: "Next Up", icon: "nextUp" },
-  { path: "/collection", label: "Collection", icon: "collection" },
-  { path: "/stats", label: "Stats", icon: "stats" },
-  { path: "/settings", label: "Settings", icon: "settings" },
-];
+/**
+ * The primary sections. Album and Artist are not listed here. Liked is opened from Stats;
+ * without Stats (Android) it takes Stats's place so it stays reachable.
+ */
+export function navItemsFor(statsEnabled: boolean): readonly NavItem[] {
+  return [
+    { path: "/listen-list", label: "Listen List", icon: "listenList" },
+    { path: "/next-up", label: "Next Up", icon: "nextUp" },
+    { path: "/collection", label: "Collection", icon: "collection" },
+    statsEnabled
+      ? { path: "/stats", label: "Stats", icon: "stats" }
+      : { path: "/liked", label: "Liked", icon: "liked" },
+    { path: "/settings", label: "Settings", icon: "settings" },
+  ];
+}
+
+export const NAV_ITEMS: readonly NavItem[] = navItemsFor(STATS_ENABLED);
 
 /** Human label for an in-app path, used by back buttons. */
 export function labelForPath(path: string): string {

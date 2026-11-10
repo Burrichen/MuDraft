@@ -183,6 +183,9 @@
 /* ---------------------------------------------------------------- content */
 
 .content {
+  /* The containing block for absolutely positioned descendants (e.g. .visually-hidden), so
+   * they scroll and clip with the page instead of making the whole window scrollable. */
+  position: relative;
   min-width: 0;
   overflow: auto;
 }

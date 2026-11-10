@@ -2,6 +2,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import type { Side, SyncConflict } from "../../services/sync";
 import { conflictField, conflictValue, plural } from "./syncText";
+import { DEVICE } from "../../app/platform";
 
 interface Props {
   conflicts: SyncConflict[];
@@ -48,7 +49,7 @@ export function ConflictDialog({ conflicts, choices, busy, onChoose, onApply, on
     >
       <div className="sync-conflicts">
         <p>
-          The same records were changed differently on this computer and on GitHub. Choose which
+          The same records were changed differently on this {DEVICE} and on GitHub. Choose which
           version to keep for each. Nothing has changed yet: until you apply, your other changes
           stay pending on both sides, and cancelling leaves everything as it is.
         </p>
@@ -59,7 +60,7 @@ export function ConflictDialog({ conflicts, choices, busy, onChoose, onApply, on
               chooseAll("local");
             }}
           >
-            Keep all from this computer
+            Keep all from this {DEVICE}
           </Button>
           <Button
             variant="ghost"
@@ -90,7 +91,7 @@ export function ConflictDialog({ conflicts, choices, busy, onChoose, onApply, on
                   />
                   <span className="sync-choice-text">
                     <span className="sync-choice-label">
-                      {side === "local" ? "Keep this computer’s version" : "Keep GitHub’s version"}
+                      {side === "local" ? `Keep this ${DEVICE}’s version` : "Keep GitHub’s version"}
                     </span>
                     <span className="sync-choice-value">{conflictValue(c, side)}</span>
                   </span>

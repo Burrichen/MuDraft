@@ -1,10 +1,11 @@
 import { useEffect, useId, useState } from "react";
+import { STATS_ENABLED } from "../../app/platform";
 import { usePreferences } from "../../app/preferencesContext";
 import { LayoutToggle } from "../../components/Filters";
 import { PageHeader } from "../../components/PageHeader";
 import { ErrorState, LoadingState } from "../../components/States";
 import { checkHealth, type HealthReport } from "../../services/health";
-import { START_PAGES, type StartPage } from "../../services/preferences";
+import { startPagesFor, type StartPage } from "../../services/preferences";
 import { ArtworkSettings } from "../artwork/ArtworkSettings";
 import { DataSources } from "./AboutSettings";
 import { ProfileSettings } from "./ProfileSettings";
@@ -78,6 +79,7 @@ export function SettingsPage() {
   const sidebarId = useId();
   const sidebarHint = useId();
   const startId = useId();
+  const startPages = startPagesFor(STATS_ENABLED);
   return (
     <section>
       <PageHeader title="Settings" />
@@ -97,12 +99,12 @@ export function SettingsPage() {
             <select
               id={startId}
               className="import-select"
-              value={prefs.startPage}
+              value={startPages.includes(prefs.startPage) ? prefs.startPage : "/listen-list"}
               onChange={(e) => {
                 update({ startPage: e.target.value as StartPage });
               }}
             >
-              {START_PAGES.map((p) => (
+              {startPages.map((p) => (
                 <option key={p} value={p}>
                   {START_LABEL[p]}
                 </option>

@@ -1,3 +1,4 @@
+import { DEVICE } from "../../app/platform";
 import type {
   ChangeSummary,
   RemoteCheck,
@@ -80,7 +81,7 @@ export function deriveStatus(
     return {
       label: "Not Connected",
       tone: "idle",
-      detail: "Add a GitHub token for this computer.",
+      detail: `Add a GitHub token for this ${DEVICE}.`,
     };
   if (status.unresolvedConflicts > 0)
     return {
@@ -93,14 +94,14 @@ export function deriveStatus(
       ? {
           label: "Offline",
           tone: "error",
-          detail: "GitHub couldn’t be reached. Your changes are safe on this computer.",
+          detail: `GitHub couldn’t be reached. Your changes are safe on this ${DEVICE}.`,
         }
       : { label: "Error", tone: "error", detail: "The last sync didn’t finish." };
   if (!status.linked)
     return {
       label: "Not Connected",
       tone: "idle",
-      detail: "Run the first sync to connect this computer.",
+      detail: `Run the first sync to connect this ${DEVICE}.`,
     };
   const remote = check?.sameSync && check.revision !== status.revision ? check.remoteChanges : null;
   if (status.pendingLocalChanges || !isEmptySummary(remote))
@@ -121,13 +122,13 @@ export function progressText(p: SyncProgress | null): string {
     case "merging":
       return "Combining changes…";
     case "backingUp":
-      return "Backing up this computer’s library…";
+      return `Backing up this ${DEVICE}’s library…`;
     case "uploading":
       return "Uploading changes…";
     case "publishing":
       return "Saving to GitHub…";
     case "applying":
-      return "Applying changes on this computer…";
+      return `Applying changes on this ${DEVICE}…`;
     default:
       return "Starting…";
   }
@@ -146,8 +147,7 @@ export function recovery(code: string, message: string): Recovery {
     case "auth_required":
       return {
         title: "GitHub didn’t accept a token",
-        advice:
-          "It may have expired or been revoked, or none is saved on this computer. Create a new fine-grained token for the repository with Contents set to “Read and write”, and save it here. Your library is unchanged.",
+        advice: `It may have expired or been revoked, or none is saved on this ${DEVICE}. Create a new fine-grained token for the repository with Contents set to “Read and write”, and save it here. Your library is unchanged.`,
         action: "token",
       };
     case "sync_setup":
@@ -161,15 +161,13 @@ export function recovery(code: string, message: string): Recovery {
       if (m.includes("newer"))
         return {
           title: "Made by a newer MuDraft",
-          advice:
-            "The sync data was written by a newer version of MuDraft. Update MuDraft on this computer, then sync again. Nothing was changed.",
+          advice: `The sync data was written by a newer version of MuDraft. Update MuDraft on this ${DEVICE}, then sync again. Nothing was changed.`,
           action: null,
         };
       if (m.includes("wasn't found") || m.includes("refused access"))
         return {
           title: "Repository not available",
-          advice:
-            "Check the owner and repository name, that the repository exists and is private, and that this computer’s token was given access to it with Contents “Read and write”.",
+          advice: `Check the owner and repository name, that the repository exists and is private, and that this ${DEVICE}’s token was given access to it with Contents “Read and write”.`,
           action: "repository",
         };
       if (m.includes("different sync data"))
@@ -198,8 +196,7 @@ export function recovery(code: string, message: string): Recovery {
     case "timeout":
       return {
         title: "Can’t reach GitHub",
-        advice:
-          "Check your internet connection and try again. Your changes are safe on this computer and will sync next time.",
+        advice: `Check your internet connection and try again. Your changes are safe on this ${DEVICE} and will sync next time.`,
         action: "retry",
       };
     case "rate_limited":
@@ -211,7 +208,7 @@ export function recovery(code: string, message: string): Recovery {
     case "disk_full":
       return {
         title: "Not enough free disk space",
-        advice: `${message} Free some space on this computer, then try again.`,
+        advice: `${message} Free some space on this ${DEVICE}, then try again.`,
         action: "retry",
       };
     case "backup_failed":
@@ -267,7 +264,7 @@ const KIND_LABELS: Record<Exclude<SyncConflict["kind"], "field">, string> = {
   collection: "Changed differently on each side",
   orphan: "Deleted on one side but still used on the other",
   duplicate: "Created on both sides",
-  deletedElsewhere: "Deleted on another computer",
+  deletedElsewhere: `Deleted on another ${DEVICE}`,
 };
 
 export function conflictField(c: SyncConflict): string {

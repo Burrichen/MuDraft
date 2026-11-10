@@ -12,6 +12,7 @@ mod e2e;
 pub mod error;
 pub mod library;
 pub mod metadata;
+mod net;
 mod paths;
 pub mod profile;
 mod state;
@@ -22,17 +23,30 @@ use tauri::Manager;
 use crate::paths::StorageProfile;
 use crate::state::AppState;
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
     // Native E2E builds only (`--features e2e`): an embedded WebDriver server on macOS.
     #[cfg(all(feature = "e2e", target_os = "macos"))]
     let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
-    builder
-        .plugin(tauri_plugin_dialog::init())
-        // In-app updates: signed artifacts from the latest GitHub release (tauri.conf.json).
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+    // Android only: reads and writes the `content://` documents the file picker returns
+    // (used from Rust in `commands::files`; no permission is granted to the renderer).
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_fs::init());
+    // Android only: opens the APK download for an update (called from Rust only).
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_opener::init());
+    // In-app updates: signed artifacts from the latest GitHub release (tauri.conf.json).
+    // Desktop only; on Android a newer APK is installed instead.
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    builder
         .setup(|app| {
+            // Files staged from an earlier run's picker are never needed again.
+            commands::files::clear_staged(app.handle());
             let state = init_state(app.handle());
             let metadata =
                 commands::metadata::MetadataService::musicbrainz(state.database_path().as_deref())?;
@@ -55,6 +69,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::health_check,
+            commands::app_update::app_update_check,
+            commands::app_update::app_update_open,
             commands::get_ui_preferences,
             commands::update_ui_preferences,
             commands::metadata::metadata_search,
