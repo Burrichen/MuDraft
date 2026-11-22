@@ -14,6 +14,7 @@ use crate::library::catalogue::{
     self, CreditInput, LISTEN_ASAP_TAG_ID, NewAlbum, NewArtist, NewEdition, NewRecording, NewTrack,
 };
 use crate::library::listening::{self, ListenKind, LogListen};
+use crate::library::lists::{self, NewEntry};
 use crate::library::preferences::{self, UiPreferencesPatch};
 use crate::library::selection::{self, SelectionMode, SelectionSource};
 use crate::library::{personal, ratings, settings, tags};
@@ -167,6 +168,14 @@ fn rich_profile(s: &AppState) {
             tx.execute(
                 "INSERT INTO imported_row (fingerprint, album_id, edition_id) VALUES ('fp-1', ?1, ?2)",
                 [&album, &std_ed.edition_id],
+            )?;
+            let list = lists::create(tx, "Best of", Some("https://pitchfork.com/story/x/"), &[
+                NewEntry { artist_name: "Alpha".into(), title: "Shared".into(), year: Some(1997), position: Some(1) },
+                NewEntry { artist_name: "Gamma".into(), title: "Unowned".into(), year: None, position: None },
+            ])?;
+            tx.execute(
+                "UPDATE list_entry SET album_id = ?1 WHERE position = 1 AND list_id = ?2",
+                rusqlite::params![album, list],
             )?;
             // Disposable: must not travel.
             tx.execute(
@@ -711,11 +720,13 @@ fn older_schema_exports_are_upgraded_by_the_normal_migrations() {
     let s = setup();
     let older = s.root.join("older.mudraft");
     // As written by a MuDraft at schema 9 (before catalogue credit parts, Listen List
-    // progress, and Next Up slots existed).
+    // progress, Next Up slots, and Lists existed).
     tamper(&s.archive, &older, true, |m, e| {
         m.schema_version = 9;
-        m.tables.retain(|t| t.name != "listen_list_track");
-        e.remove("data/listen_list_track.json");
+        for table in ["listen_list_track", "list", "list_entry"] {
+            m.tables.retain(|t| t.name != table);
+            e.remove(&format!("data/{table}.json"));
+        }
         for (table, column) in [
             ("catalogue_entry", "credit_parts"),
             ("selection_session", "slot"),

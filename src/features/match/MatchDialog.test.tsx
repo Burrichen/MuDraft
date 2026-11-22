@@ -62,19 +62,28 @@ const SEARCH: SearchPage = {
   ],
 };
 
+const STANDARD = {
+  id: REL,
+  title: "OK Computer",
+  disambiguation: null,
+  date: { value: "1997-06", precision: "month" as const, year: 1997 },
+  country: "GB",
+  status: "Official",
+  formats: ["CD"],
+  trackCount: 12,
+};
+
 const EDITIONS: EditionList = {
-  total: 1,
+  total: 2,
   truncated: false,
   editions: [
+    STANDARD,
     {
-      id: REL,
-      title: "OK Computer",
-      disambiguation: null,
-      date: { value: "1997-06", precision: "month", year: 1997 },
-      country: "GB",
-      status: "Official",
-      formats: ["CD"],
-      trackCount: 12,
+      ...STANDARD,
+      id: "11111111-1111-4111-8111-222222222222",
+      disambiguation: "Deluxe edition",
+      date: { value: "2017-06", precision: "month" as const, year: 2017 },
+      trackCount: 24,
     },
   ],
 };
@@ -137,6 +146,23 @@ describe("MatchDialog", () => {
         releaseId: REL,
         editionName: "Standard",
       }),
+    );
+  });
+
+  it("doesn't offer an edition choice when there is only one, and uses it", async () => {
+    vi.mocked(loadEditions).mockResolvedValue(
+      fetched({ total: 1, truncated: false, editions: [STANDARD] }),
+    );
+    const { onConfirm } = setup();
+    await search();
+    await userEvent.click(await screen.findByRole("radio", { name: /1997 · Album/ }));
+    expect(await screen.findByText(/One edition of this album is listed/)).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: /Edition of/ })).toBeNull();
+    const add = screen.getByRole("button", { name: "Add album" });
+    expect(add).not.toHaveAttribute("aria-disabled");
+    await userEvent.click(add);
+    expect(onConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "musicbrainz", releaseGroupId: RG, releaseId: REL }),
     );
   });
 

@@ -23,6 +23,7 @@ use crate::error::{AppError, AppResult};
 use crate::library::catalogue::{self, CreditInput, NewAlbum, NewArtist, NewEdition, NewTrack};
 use crate::library::discography;
 use crate::library::listening::{self, ListenKind, LogListen};
+use crate::library::lists::{self, NewEntry};
 use crate::library::personal::{self, CollectionSource};
 use crate::library::selection::{self, SelectionMode};
 use crate::library::{metadata_import, next_up, ratings, tags};
@@ -315,6 +316,23 @@ async fn initial_upload_to_an_empty_repository_then_download() {
         let tag = tags::create(tx, "Chill", None)?;
         tags::set_album_tags(tx, std::slice::from_ref(&album.album), &[tag.id], &[])
     });
+    a.write(|tx| {
+        let entry = |artist: &str, title: &str| NewEntry {
+            artist_name: artist.into(),
+            title: title.into(),
+            year: Some(1997),
+            position: None,
+        };
+        lists::create(
+            tx,
+            "Best of",
+            None,
+            &[
+                entry("Radiohead", "OK Computer"),
+                entry("Slint", "Spiderland"),
+            ],
+        )
+    });
 
     // A populated library needs confirmation; nothing is written without it.
     match a.sync.initialize(&a.state, false).await.unwrap() {
@@ -358,6 +376,11 @@ async fn initial_upload_to_an_empty_repository_then_download() {
         "zero is a rating, not unrated"
     );
     assert_eq!(b.int("SELECT COUNT(*) FROM listen_event"), Some(1));
+    assert_eq!(
+        b.int("SELECT COUNT(*) FROM list_entry"),
+        Some(2),
+        "lists sync"
+    );
     assert_eq!(
         b.text("SELECT name FROM tag WHERE builtin_key IS NULL"),
         Some("Chill".into())
@@ -1134,17 +1157,22 @@ async fn damaged_newer_unrelated_or_public_repositories_are_refused() {
         &good[..good.len() - 1],
         &["primary_type", "secondary_types"],
     );
+    // Lists arrived after schema 11 too, so files written then have none.
+    let lists = ["sync/state/list.json", "sync/state/list_entry.json"];
+    let list_files: Vec<Vec<u8>> = lists.iter().map(|p| gh.file(p).unwrap()).collect();
     gh.commit_files(&[
         (albums, Some(&old_albums)),
         (progress, None),
         (sessions, Some(&old_sessions)),
+        (lists[0], None),
+        (lists[1], None),
     ]);
     let current = format.clone();
     format["schemaVersion"] = json!(11);
     format["files"]
         .as_array_mut()
         .unwrap()
-        .retain(|f| f["path"] != progress);
+        .retain(|f| f["path"] != progress && !lists.contains(&f["path"].as_str().unwrap_or("")));
     for f in format["files"].as_array_mut().unwrap() {
         for (path, bytes) in [(sessions, &old_sessions), (albums, &old_albums)] {
             if f["path"] == path {
@@ -1161,6 +1189,8 @@ async fn damaged_newer_unrelated_or_public_repositories_are_refused() {
     gh.commit_files(&[
         (progress, Some(&progress_file)),
         (sessions, Some(&sessions_file)),
+        (lists[0], Some(&list_files[0])),
+        (lists[1], Some(&list_files[1])),
     ]);
     let mut stale = current.clone();
     stale["schemaVersion"] = json!(11);

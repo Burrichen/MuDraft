@@ -228,6 +228,21 @@ pub async fn edition_switch(
     state.with_db(|db| db.write(|tx| editions::switch(tx, &album_id, &edition_id, copy_ratings)))
 }
 
+/// Delete an extra edition. Refused (nothing changes) if it would lose listens, ratings,
+/// favourites or a review, or if it is the album's only edition.
+#[tauri::command]
+pub async fn edition_delete(
+    state: State<'_, AppState>,
+    album_id: String,
+    edition_id: String,
+) -> AppResult<()> {
+    let file = state.with_db(|db| db.write(|tx| editions::delete(tx, &album_id, &edition_id)))?;
+    if let Some(name) = file {
+        artwork::remove_file(&artwork::artwork_dir(&state), &name);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtworkPreference {

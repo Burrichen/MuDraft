@@ -290,7 +290,9 @@ export function MatchDialog({
   const candidate = candidates.find((c) => c.id === groupId);
   const editionList =
     editions.kind === "ready" ? collapseEditions(editions.data.value.editions) : [];
-  const edition = editionList.find((e) => e.id === releaseId);
+  // With a single edition there is nothing to choose, so it is used without asking.
+  const onlyEdition = editionList.length === 1 ? editionList[0] : undefined;
+  const edition = onlyEdition ?? editionList.find((e) => e.id === releaseId);
 
   const manualReady = form.title.trim() !== "" && form.artist.trim() !== "" && !yearInvalid;
   const confirmReason =
@@ -537,6 +539,10 @@ export function MatchDialog({
                     <FetchNote fetched={editions.data} />
                     {editionList.length === 0 ? (
                       <p className="match-muted">No editions are listed for this album.</p>
+                    ) : onlyEdition ? (
+                      <p className="match-muted">
+                        One edition of this album is listed; it will be used.
+                      </p>
                     ) : (
                       <div
                         className="match-options"

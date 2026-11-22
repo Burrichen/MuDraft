@@ -171,6 +171,12 @@ export async function renameEdition(editionId: string, name: string): Promise<vo
   notifyLibraryChanged();
 }
 
+/** Refused (nothing changes) if it holds listens, ratings, liked tracks or a review. */
+export async function deleteEdition(albumId: string, editionId: string): Promise<void> {
+  await callNative("edition_delete", { albumId, editionId });
+  notifyLibraryChanged();
+}
+
 export async function refreshAlbum(
   albumId: string,
   editionId: string,

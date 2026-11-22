@@ -102,6 +102,8 @@ pub const SPECS: &[TableSpec] = &[
     table("listen_list_entry"),
     table("listen_list_track"),
     table("collection_entry"),
+    table("list"),
+    table("list_entry"),
     table("selection_session"),
     TableSpec {
         groups: &[&["status", "resolved_at"]],

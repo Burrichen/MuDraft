@@ -48,6 +48,7 @@
     "allow-edition-add",
     "allow-edition-switch-preview",
     "allow-edition-switch",
+    "allow-edition-delete",
     "allow-artwork-preference",
     "allow-artwork-set-preference",
     "allow-artwork-fetch",
@@ -100,6 +101,18 @@
     "allow-sync-remove-token",
     "allow-sync-check",
     "allow-sync-initialize",
-    "allow-sync-now"
+    "allow-sync-now",
+    "allow-lists-overview",
+    "allow-list-detail",
+    "allow-list-create",
+    "allow-list-rename",
+    "allow-list-delete",
+    "allow-list-entries-add",
+    "allow-list-entry-remove",
+    "allow-list-import-preview",
+    "allow-list-entry-add-to-listen-list",
+    "allow-list-add-unlistened-to-listen-list",
+    "allow-list-entry-link",
+    "allow-list-review-missing"
   ]
 }

@@ -11,6 +11,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { path: "/listen-list", label: "Listen List", icon: "listenList" },
   { path: "/next-up", label: "Next Up", icon: "nextUp" },
   { path: "/collection", label: "Collection", icon: "collection" },
+  { path: "/lists", label: "Lists", icon: "lists" },
   { path: "/stats", label: "Stats", icon: "stats" },
   { path: "/settings", label: "Settings", icon: "settings" },
 ];
@@ -22,5 +23,6 @@ export function labelForPath(path: string): string {
   if (path === "/liked") return "Liked";
   if (path.startsWith("/albums/")) return "album";
   if (path.startsWith("/artists/")) return "artist";
+  if (path.startsWith("/lists/")) return "list";
   return "previous page";
 }

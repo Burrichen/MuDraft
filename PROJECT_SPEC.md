@@ -8,7 +8,7 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 - No hosted backend, accounts, telemetry, subscription, or runtime Node server. Optional GitHub sync (§7) uses the user's own GitHub account and private repository.
 - Sleek dark UI inspired by FDraft: collapsible sidebar, artwork cards, restrained motion.
 - Colour (supersedes the earlier navy/blue base): a neutral charcoal/grey app, after VS Code's default dark theme and FDraft, with blue accents only. Backgrounds, sidebar, cards, dialogs, inputs, and unselected bubbles stay grey (`#1E1E1E`, `#252526`, `#2D2D30`; borders `#3C3C3C`; text `#D4D4D4`/`#A6A6A6`). Blue (`#3794FF` family) is reserved for primary actions, links, focus rings, selected indicators, and progress fills; active nav/filter states may use restrained blue. No navy surfaces or broad blue gradients. Artwork, user tag colours, and success/warning/error colours are kept; Listen ASAP defaults to mustard yellow. Change colours only through shared theme tokens (`src/theme/tokens.css`), keeping WCAG AA contrast. No theme selector.
-- Navigation: Listen List, Next Up, Collection, Stats, Settings; nested Album and Artist pages. The sidebar footer shows the app version and storage status; Settings shows the version.
+- Navigation: Listen List, Next Up, Collection, Lists (Update 1), Stats, Settings; nested Album, Artist and List pages. The sidebar footer shows the app version and storage status; Settings shows the version.
 - Listen List and Collection tag bubbles cycle: only albums with the tag → albums without it (red, ✕) → off. Album pages have no About/description section.
 
 ## 2. Data
@@ -68,7 +68,7 @@ MuDraft (MusicDraft) is a local-first desktop music backlog, one-album picker, a
 
 ## 8. Exclusions
 
-External critic/community scores; RYM/Pitchfork integrations; Diary screen; streaming/playback integrations; playlists; social features; challenges; events; streaks; hosted or automatic cloud sync (only the manual GitHub sync in §7); automatic updater.
+External critic/community scores; RYM/Pitchfork score integrations (Update 1 only reads a ranked list from a Pitchfork page the user supplies, §11); Diary screen; streaming/playback integrations; playlists (Lists in §11 are not playlists); social features; challenges; events; streaks; hosted or automatic cloud sync (only the manual GitHub sync in §7); automatic updater.
 
 ## 9. Module map (planned)
 
@@ -101,3 +101,12 @@ External critic/community scores; RYM/Pitchfork integrations; Diary screen; stre
 12. Settings and profile export/import.
 13. Release packaging, signing status, CI artifacts.
 14. Private GitHub sync: engine and safe merging (Prompt 22); sync UI and conflict resolution (Prompt 23).
+
+## 11. Update 1 — Lists
+
+- Sidebar page **Lists**: cards with a progress bar; a list page shows every album and whether it is listened to. Lists are tracking aids, not playlists: no playback and no sequencing.
+- An entry is the list's own record (artist, title, year, rank). It is **listened** when a library album with the same title and artist is in the Collection, which is the only thing counted toward progress. Being on the Listen List is shown but never counted. Status is derived live; nothing is copied.
+- Albums are added by hand or by importing a ranked list from a web page. Import is native, https only, limited to Pitchfork pages, previewed before anything is saved, and never overwrites existing data.
+- "Add unlistened to Listen List" (whole list, or one album) puts albums already in the library on the Listen List and leaves listened or listed ones alone. An album not in the library is never created automatically: one album opens the MusicBrainz match dialog prefilled; the rest go through the existing CSV import review ("Find N on MusicBrainz"). Nothing is accepted without the user choosing the match, and matching reuses existing artists and albums by MusicBrainz ID, so nothing is duplicated. A reviewed match is linked back to its list entry even when its title is worded differently.
+- Lists are included in profile export/import and GitHub sync. Deleting a list never touches albums, the Collection, or the Listen List.
+- Album page: an extra edition can be deleted, but never the last one, and never one holding listens, ratings, liked tracks, or a review. Add-album shows no edition choice when MusicBrainz lists only one.

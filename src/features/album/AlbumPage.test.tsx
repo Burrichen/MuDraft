@@ -4,6 +4,7 @@ import {
   addEdition,
   albumDetail,
   artworkPreference,
+  deleteEdition,
   editAlbum,
   editionCandidates,
   fetchArtwork,
@@ -32,6 +33,7 @@ vi.mock("../../services/album", async (importOriginal) => ({
   refreshAlbum: vi.fn(),
   editionCandidates: vi.fn(),
   addEdition: vi.fn(),
+  deleteEdition: vi.fn(() => Promise.resolve()),
   previewEditionSwitch: vi.fn(),
   switchEdition: vi.fn(),
   removeArtwork: vi.fn(),
@@ -516,6 +518,40 @@ describe("Album page", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Add edition" }));
     expect(addEdition).toHaveBeenCalledWith(ALBUM, "r3", "Remastered");
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("ordinary pressing");
+  });
+
+  it("deletes an edition only after confirming, and explains what changes", async () => {
+    renderApp(`/albums/${ALBUM}`);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete edition Deluxe" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete this edition?" });
+    expect(deleteEdition).not.toHaveBeenCalled();
+    expect(dialog).toHaveTextContent("This edition will leave your Collection.");
+    expect(dialog).toHaveTextContent("can’t be deleted");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete edition" }));
+    expect(deleteEdition).toHaveBeenCalledWith(ALBUM, DLX);
+    expect(await screen.findByText("Deleted the “Deluxe” edition.")).toBeInTheDocument();
+  });
+
+  it("shows why an edition can't be deleted and offers no delete for the only edition", async () => {
+    vi.mocked(deleteEdition).mockRejectedValueOnce(
+      new NativeError("conflict", "the “Deluxe” edition has 1 listen. It was kept"),
+    );
+    renderApp(`/albums/${ALBUM}`);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete edition Deluxe" }));
+    await userEvent.click(
+      within(screen.getByRole("dialog", { name: "Delete this edition?" })).getByRole("button", {
+        name: "Delete edition",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("has 1 listen");
+  });
+
+  it("offers no edition delete when the album has a single edition", async () => {
+    const one = detail();
+    vi.mocked(albumDetail).mockResolvedValue({ ...one, editions: one.editions.slice(1) });
+    renderApp(`/albums/${ALBUM}`);
+    await screen.findByRole("heading", { level: 2, name: "Editions" });
+    expect(screen.queryByRole("button", { name: /Delete edition/ })).toBeNull();
   });
 
   it("removes the album from the Collection after confirming", async () => {

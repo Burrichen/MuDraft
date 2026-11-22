@@ -44,6 +44,7 @@ export type NativeCommand =
   | "edition_add"
   | "edition_switch_preview"
   | "edition_switch"
+  | "edition_delete"
   | "artwork_preference"
   | "artwork_set_preference"
   | "artwork_fetch"
@@ -96,7 +97,19 @@ export type NativeCommand =
   | "sync_remove_token"
   | "sync_check"
   | "sync_initialize"
-  | "sync_now";
+  | "sync_now"
+  | "lists_overview"
+  | "list_detail"
+  | "list_create"
+  | "list_rename"
+  | "list_delete"
+  | "list_entries_add"
+  | "list_entry_remove"
+  | "list_import_preview"
+  | "list_entry_add_to_listen_list"
+  | "list_add_unlistened_to_listen_list"
+  | "list_entry_link"
+  | "list_review_missing";
 
 /** Events Rust emits to the renderer. */
 export type NativeEvent = "sync-progress";

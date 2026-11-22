@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-entry-link"
+description = "Enables the list_entry_link command without any pre-configured scope."
+commands.allow = ["list_entry_link"]
+
+[[permission]]
+identifier = "deny-list-entry-link"
+description = "Denies the list_entry_link command without any pre-configured scope."
+commands.deny = ["list_entry_link"]

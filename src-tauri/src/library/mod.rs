@@ -9,6 +9,7 @@ pub mod editions;
 pub mod idempotency;
 pub mod listening;
 pub mod listing;
+pub mod lists;
 pub mod metadata_import;
 pub mod next_up;
 pub mod personal;
@@ -76,6 +77,8 @@ pub(crate) enum Table {
     Tag,
     SelectionSession,
     SelectionAttempt,
+    List,
+    ListEntry,
 }
 
 impl Table {
@@ -89,6 +92,8 @@ impl Table {
             Self::Tag => "tag",
             Self::SelectionSession => "selection_session",
             Self::SelectionAttempt => "selection_attempt",
+            Self::List => "list",
+            Self::ListEntry => "list_entry",
         }
     }
 }

@@ -14,6 +14,7 @@ import {
   albumDetail,
   artworkPreference,
   artworkUrl,
+  deleteEdition,
   fetchArtwork,
   refreshAlbum,
   removeArtwork,
@@ -72,6 +73,7 @@ export function AlbumPage() {
   const [adding, setAdding] = useState(false);
   const [switching, setSwitching] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<EditionView | null>(null);
+  const [deleting, setDeleting] = useState<EditionView | null>(null);
   const [newName, setNewName] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
@@ -462,6 +464,18 @@ export function AlbumPage() {
                 >
                   Rename
                 </Button>
+                {detail.editions.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    className="button-small"
+                    aria-label={`Delete edition ${e.name}`}
+                    onClick={() => {
+                      setDeleting(e);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                )}
               </div>
             </li>
           ))}
@@ -610,6 +624,53 @@ export function AlbumPage() {
             }}
           />
         </div>
+      </Dialog>
+
+      <Dialog
+        open={deleting !== null}
+        title="Delete this edition?"
+        onClose={() => {
+          setDeleting(null);
+        }}
+        actions={
+          <>
+            <Button
+              onClick={() => {
+                setDeleting(null);
+              }}
+            >
+              Keep
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() =>
+                void run(async () => {
+                  const target = deleting;
+                  setDeleting(null);
+                  if (!target) return null;
+                  await deleteEdition(detail.albumId, target.id);
+                  if (target.id === detail.editionId) setParams({}, { replace: true });
+                  return `Deleted the “${target.name}” edition.`;
+                })
+              }
+            >
+              Delete edition
+            </Button>
+          </>
+        }
+      >
+        <p>
+          The “{deleting?.name}” edition and its tracklist will be deleted from “{detail.title}”.
+        </p>
+        <p className="setting-hint">
+          {[
+            deleting?.onListenList && "Your Listen List will use another edition instead.",
+            deleting?.inCollection && "This edition will leave your Collection.",
+            "An edition with listens, ratings, liked tracks, or a review can’t be deleted.",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        </p>
       </Dialog>
 
       <Dialog

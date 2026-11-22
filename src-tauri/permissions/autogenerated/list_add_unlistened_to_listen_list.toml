@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-add-unlistened-to-listen-list"
+description = "Enables the list_add_unlistened_to_listen_list command without any pre-configured scope."
+commands.allow = ["list_add_unlistened_to_listen_list"]
+
+[[permission]]
+identifier = "deny-list-add-unlistened-to-listen-list"
+description = "Denies the list_add_unlistened_to_listen_list command without any pre-configured scope."
+commands.deny = ["list_add_unlistened_to_listen_list"]

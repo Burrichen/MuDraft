@@ -387,7 +387,7 @@ fn write(
     Ok(())
 }
 
-fn remove_file(dir: &Path, name: &str) {
+pub(crate) fn remove_file(dir: &Path, name: &str) {
     if let Err(e) = std::fs::remove_file(dir.join(name))
         && e.kind() != std::io::ErrorKind::NotFound
     {

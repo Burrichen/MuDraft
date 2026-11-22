@@ -5,6 +5,7 @@ pub mod csv_import;
 pub mod discography;
 pub mod library;
 pub mod listening;
+pub mod lists;
 pub mod metadata;
 pub mod next_up;
 pub mod profile;

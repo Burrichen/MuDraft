@@ -7,6 +7,9 @@
 //!   can be copied only between tracks that share a recording identity; different mixes
 //!   or live versions have different recordings and are never matched. Listens stay on
 //!   the edition that was actually heard. Nothing on the old edition is deleted.
+//! - An edition can be deleted only when that loses none of the user's own record of it:
+//!   never the album's last edition, and never one with listens, ratings, favourites or a
+//!   review.
 
 use std::collections::HashMap;
 
@@ -297,4 +300,102 @@ pub fn switch(
         params![parse_uuid("album", album_id)?, preview.to.id],
     )?;
     Ok(SwitchResult { copied })
+}
+
+/// Delete an extra edition of an album.
+///
+/// Refused when it is the album's only edition, or when it holds listens, rated or
+/// favourite tracks, or a rating or review: that is the user's own record and is never
+/// discarded silently. Otherwise its tracks, artwork row and CSV-import markers go; the
+/// Listen List entry and Next Up history move to the earliest remaining edition, and its
+/// Collection membership (the only thing lost) is removed. Returns the cached artwork
+/// file to delete from disk once this commits.
+pub fn delete(tx: &Transaction<'_>, album_id: &str, edition_id: &str) -> AppResult<Option<String>> {
+    let album_id = parse_uuid("album", album_id)?;
+    let edition_id = parse_uuid("edition", edition_id)?;
+    let edition = edition_ref(tx, &album_id, &edition_id)?;
+    let keep: Option<String> = tx
+        .query_row(
+            "SELECT id FROM edition WHERE album_id = ?1 AND id != ?2 ORDER BY created_at, id LIMIT 1",
+            params![album_id, edition_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(keep) = keep else {
+        return Err(AppError::Conflict(format!(
+            "“{}” is this album’s only edition, and an album needs at least one",
+            edition.name
+        )));
+    };
+
+    let count =
+        |sql: &str| -> AppResult<u32> { Ok(tx.query_row(sql, params![edition_id], |r| r.get(0))?) };
+    let listens =
+        count("SELECT COUNT(*) FROM listen_event WHERE edition_id = ?1 AND deleted_at IS NULL")?;
+    let rated_tracks = count(
+        "SELECT COUNT(*) FROM track_rating tr JOIN track t ON t.id = tr.track_id
+         WHERE t.edition_id = ?1 AND (tr.rating IS NOT NULL OR tr.is_favourite = 1)",
+    )?;
+    let reviewed = count(
+        "SELECT COUNT(*) FROM album_review WHERE edition_id = ?1
+         AND (rating IS NOT NULL OR review IS NOT NULL)",
+    )?;
+    let plural = |n: u32| if n == 1 { "" } else { "s" };
+    let mut kept = Vec::new();
+    if listens > 0 {
+        kept.push(format!("{listens} listen{}", plural(listens)));
+    }
+    if rated_tracks > 0 {
+        kept.push(format!(
+            "{rated_tracks} rated or liked track{}",
+            plural(rated_tracks)
+        ));
+    }
+    if reviewed > 0 {
+        kept.push("an album rating or review".to_owned());
+    }
+    if !kept.is_empty() {
+        return Err(AppError::Conflict(format!(
+            "the “{}” edition has {}. Deleting it would lose them, so it was kept",
+            edition.name,
+            kept.join(", ")
+        )));
+    }
+
+    let artwork_file: Option<String> = tx
+        .query_row(
+            "SELECT file_name FROM artwork WHERE owner_type = 'edition' AND owner_id = ?1",
+            params![edition_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+    // Listens already deleted (and undoable) go with it; ratings and reviews left empty
+    // are only placeholder rows.
+    tx.execute(
+        "DELETE FROM listen_event WHERE edition_id = ?1",
+        params![edition_id],
+    )?;
+    tx.execute(
+        "DELETE FROM track_rating WHERE track_id IN (SELECT id FROM track WHERE edition_id = ?1)",
+        params![edition_id],
+    )?;
+    tx.execute(
+        "DELETE FROM album_review WHERE edition_id = ?1",
+        params![edition_id],
+    )?;
+    tx.execute(
+        "DELETE FROM collection_entry WHERE edition_id = ?1",
+        params![edition_id],
+    )?;
+    tx.execute(
+        "UPDATE listen_list_entry SET edition_id = ?2 WHERE edition_id = ?1",
+        params![edition_id, keep],
+    )?;
+    tx.execute(
+        "UPDATE selection_attempt SET edition_id = ?2 WHERE edition_id = ?1",
+        params![edition_id, keep],
+    )?;
+    tx.execute("DELETE FROM edition WHERE id = ?1", params![edition_id])?;
+    Ok(artwork_file)
 }
