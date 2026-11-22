@@ -1,3 +1,4 @@
+import { STATS_ENABLED } from "../app/platform";
 import { callNative, NativeError } from "../transport/native";
 
 export type AlbumLayout = "grid" | "list";
@@ -32,16 +33,30 @@ export const DEFAULT_PREFERENCES: UiPreferences = {
   showArtwork: true,
 };
 
-/** The page a fresh launch opens. */
-export function startRoute(p: UiPreferences): string {
-  return p.startPage === "last" ? p.lastRoute : p.startPage;
+/** Start pages offered in Settings; without Stats (Android) that one is left out. */
+export function startPagesFor(statsEnabled: boolean): readonly StartPage[] {
+  return statsEnabled ? START_PAGES : START_PAGES.filter((p) => p !== "/stats");
 }
 
-const PRIMARY_ROUTES = new Set(["/listen-list", "/next-up", "/collection", "/stats", "/settings"]);
+/** The page a fresh launch opens. A stored Stats route (e.g. from a synced desktop profile)
+ * opens Listen List when this build has no Stats; the stored value itself is left alone. */
+export function startRoute(p: UiPreferences, statsEnabled: boolean = STATS_ENABLED): string {
+  const route = p.startPage === "last" ? p.lastRoute : p.startPage;
+  return route === "/stats" && !statsEnabled ? "/listen-list" : route;
+}
+
+const PRIMARY_ROUTES = new Set([
+  "/listen-list",
+  "/next-up",
+  "/collection",
+  "/lists",
+  "/stats",
+  "/settings",
+]);
 const NESTED_ROUTE =
   /^\/(albums|artists)\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Same rule Rust enforces: the five sections, or an album/artist page by UUID. */
+/** Same rule Rust enforces: the primary sections, or an album/artist/list page by UUID. */
 export function isPersistableRoute(path: string): boolean {
   return PRIMARY_ROUTES.has(path) || NESTED_ROUTE.test(path);
 }

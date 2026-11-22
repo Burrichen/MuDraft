@@ -19,6 +19,7 @@ const PRIMARY_ROUTES: &[&str] = &[
     "/listen-list",
     "/next-up",
     "/collection",
+    "/lists",
     "/stats",
     "/settings",
 ];
@@ -123,7 +124,7 @@ pub fn update(tx: &Transaction<'_>, patch: &UiPreferencesPatch) -> AppResult<UiP
     load(tx)
 }
 
-/// Only in-app routes are accepted: the five sections, or an album/artist page by ID.
+/// Only in-app routes are accepted: the primary sections, or an album/artist/list page by ID.
 pub fn normalize_route(raw: &str) -> AppResult<String> {
     let path = raw.trim();
     if PRIMARY_ROUTES.contains(&path) {
@@ -136,6 +137,7 @@ pub fn normalize_route(raw: &str) -> AppResult<String> {
     };
     nested("/albums/")
         .or_else(|| nested("/artists/"))
+        .or_else(|| nested("/lists/"))
         .unwrap_or_else(|| {
             Err(AppError::validation(
                 "route",

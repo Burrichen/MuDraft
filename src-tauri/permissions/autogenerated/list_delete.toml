@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-delete"
+description = "Enables the list_delete command without any pre-configured scope."
+commands.allow = ["list_delete"]
+
+[[permission]]
+identifier = "deny-list-delete"
+description = "Denies the list_delete command without any pre-configured scope."
+commands.deny = ["list_delete"]

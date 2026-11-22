@@ -1,16 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: MuDraft commands, native message dialogs, page zoom, and signed in-app updates (check, download, install, restart). No fs, shell, SQL, or HTTP plugins: networking stays in Rust.",
+  "description": "Main window: MuDraft commands, native message dialogs, and page zoom, on every platform. No fs, shell, SQL, or HTTP plugins: networking stays in Rust.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:webview:allow-set-webview-zoom",
     "dialog:allow-message",
-    "updater:allow-check",
-    "updater:allow-download-and-install",
-    "process:allow-restart",
     "allow-health-check",
+    "allow-app-update-check",
+    "allow-app-update-open",
     "allow-get-ui-preferences",
     "allow-update-ui-preferences",
     "allow-metadata-search",
@@ -48,6 +47,7 @@
     "allow-edition-add",
     "allow-edition-switch-preview",
     "allow-edition-switch",
+    "allow-edition-delete",
     "allow-artwork-preference",
     "allow-artwork-set-preference",
     "allow-artwork-fetch",
@@ -100,6 +100,18 @@
     "allow-sync-remove-token",
     "allow-sync-check",
     "allow-sync-initialize",
-    "allow-sync-now"
+    "allow-sync-now",
+    "allow-lists-overview",
+    "allow-list-detail",
+    "allow-list-create",
+    "allow-list-rename",
+    "allow-list-delete",
+    "allow-list-entries-add",
+    "allow-list-entry-remove",
+    "allow-list-import-preview",
+    "allow-list-entry-add-to-listen-list",
+    "allow-list-add-unlistened-to-listen-list",
+    "allow-list-entry-link",
+    "allow-list-review-missing"
   ]
 }

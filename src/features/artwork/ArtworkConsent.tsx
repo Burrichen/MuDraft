@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import { artworkPreference, setArtworkPreference } from "../../services/album";
+import { DEVICE } from "../../app/platform";
 
 /** What downloading artwork involves, in plain words (shared with Settings). */
 export function ArtworkExplanation() {
@@ -13,7 +14,7 @@ export function ArtworkExplanation() {
         account or personal details are sent.
       </p>
       <p>
-        Covers are saved on this computer (each up to 8 MB) so they keep working offline. You can
+        Covers are saved on this {DEVICE} (each up to 8 MB) so they keep working offline. You can
         clear them, replace any cover with your own image, or turn downloads off in Settings at any
         time.
       </p>

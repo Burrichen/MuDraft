@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-lists-overview"
+description = "Enables the lists_overview command without any pre-configured scope."
+commands.allow = ["lists_overview"]
+
+[[permission]]
+identifier = "deny-lists-overview"
+description = "Denies the lists_overview command without any pre-configured scope."
+commands.deny = ["lists_overview"]

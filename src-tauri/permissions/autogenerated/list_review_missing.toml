@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-review-missing"
+description = "Enables the list_review_missing command without any pre-configured scope."
+commands.allow = ["list_review_missing"]
+
+[[permission]]
+identifier = "deny-list-review-missing"
+description = "Denies the list_review_missing command without any pre-configured scope."
+commands.deny = ["list_review_missing"]

@@ -62,6 +62,8 @@ pub const TABLES: &[&str] = &[
     "listen_list_entry",
     "listen_list_track",
     "collection_entry",
+    "list",
+    "list_entry",
     "listen_event",
     "listen_event_track",
     "track_rating",

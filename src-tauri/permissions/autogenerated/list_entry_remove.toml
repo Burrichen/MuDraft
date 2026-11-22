@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-entry-remove"
+description = "Enables the list_entry_remove command without any pre-configured scope."
+commands.allow = ["list_entry_remove"]
+
+[[permission]]
+identifier = "deny-list-entry-remove"
+description = "Denies the list_entry_remove command without any pre-configured scope."
+commands.deny = ["list_entry_remove"]

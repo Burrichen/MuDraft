@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use rusqlite::params;
 use serde::Serialize;
 use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
 
+use super::files;
 use super::metadata::MetadataService;
 use crate::artwork::http::MAX_IMAGE_BYTES;
 use crate::artwork::{self, ArtworkService, ArtworkState, CacheCleared, CacheSize};
@@ -228,6 +228,21 @@ pub async fn edition_switch(
     state.with_db(|db| db.write(|tx| editions::switch(tx, &album_id, &edition_id, copy_ratings)))
 }
 
+/// Delete an extra edition. Refused (nothing changes) if it would lose listens, ratings,
+/// favourites or a review, or if it is the album's only edition.
+#[tauri::command]
+pub async fn edition_delete(
+    state: State<'_, AppState>,
+    album_id: String,
+    edition_id: String,
+) -> AppResult<()> {
+    let file = state.with_db(|db| db.write(|tx| editions::delete(tx, &album_id, &edition_id)))?;
+    if let Some(name) = file {
+        artwork::remove_file(&artwork::artwork_dir(&state), &name);
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtworkPreference {
@@ -301,33 +316,20 @@ pub async fn artwork_replace(
     state: State<'_, AppState>,
     edition_id: String,
 ) -> AppResult<Option<ArtworkState>> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    app.dialog()
-        .file()
-        .set_title("Choose album artwork")
-        .add_filter("Images", &["jpg", "jpeg", "png", "gif", "webp"])
-        .pick_file(move |p| {
-            let _ = tx.send(p);
-        });
-    let Some(picked) = rx
-        .await
-        .map_err(|_| AppError::Internal("file dialog closed unexpectedly".into()))?
+    let Some(file) = files::pick_open(
+        &app,
+        "artwork",
+        "Choose album artwork",
+        ("Images", &["jpg", "jpeg", "png", "gif", "webp"]),
+        MAX_IMAGE_BYTES as u64,
+        "artwork",
+    )
+    .await?
     else {
         return Ok(None);
     };
-    let path = picked
-        .into_path()
-        .map_err(|e| AppError::validation("file", e.to_string()))?;
-    let size = std::fs::metadata(&path)
-        .map_err(|e| AppError::validation("file", e.to_string()))?
-        .len();
-    if size as usize > MAX_IMAGE_BYTES {
-        return Err(AppError::validation(
-            "image",
-            format!("larger than {} MB", MAX_IMAGE_BYTES / (1024 * 1024)),
-        ));
-    }
-    let bytes = std::fs::read(&path).map_err(|e| AppError::validation("file", e.to_string()))?;
+    let bytes =
+        std::fs::read(file.path()).map_err(|e| AppError::validation("file", e.to_string()))?;
     artwork::replace_local(&state, &edition_id, &bytes).map(Some)
 }
 

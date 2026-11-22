@@ -3,6 +3,7 @@ import { Button } from "../../components/Button";
 import { Dialog } from "../../components/Dialog";
 import type { RemoteCheck, SyncCounts } from "../../services/sync";
 import { isEmptyLibrary, plural } from "./syncText";
+import { DEVICE, DEVICES } from "../../app/platform";
 
 export type FirstChoice = "upload" | "download" | "merge";
 
@@ -32,7 +33,7 @@ function Preview({ local, remote }: { local: SyncCounts; remote: SyncCounts | nu
       <thead>
         <tr>
           <th scope="col">Library</th>
-          <th scope="col">This computer</th>
+          <th scope="col">This {DEVICE}</th>
           <th scope="col">GitHub</th>
         </tr>
       </thead>
@@ -72,9 +73,9 @@ export function FirstSyncDialog({ check, repository, busy, onChoose, onClose }: 
     } else if (check.kind === "empty" || check.kind === "uninitialised") {
       body = (
         <p>
-          {repository} has no MuDraft library yet. Uploading publishes this computer’s library
-          there; your other computers then download or merge with it.
-          {localEmpty && " This computer’s library is empty, so the synced library starts empty."}
+          {repository} has no MuDraft library yet. Uploading publishes this {DEVICE}’s library
+          there; your other {DEVICES} then download or merge with it.
+          {localEmpty && ` This ${DEVICE}’s library is empty, so the synced library starts empty.`}
         </p>
       );
       actions = (
@@ -94,7 +95,7 @@ export function FirstSyncDialog({ check, repository, busy, onChoose, onClose }: 
     } else if (localEmpty) {
       body = (
         <p>
-          This computer’s library is empty. Downloading copies the library from {repository} here.
+          This {DEVICE}’s library is empty. Downloading copies the library from {repository} here.
         </p>
       );
       actions = (
@@ -114,9 +115,9 @@ export function FirstSyncDialog({ check, repository, busy, onChoose, onClose }: 
     } else if (confirmReplace) {
       body = (
         <p role="alert">
-          Downloading replaces this computer’s library — {plural(check.local.albums, "album")} and{" "}
+          Downloading replaces this {DEVICE}’s library — {plural(check.local.albums, "album")} and{" "}
           {String(check.local.collection)} in the Collection — with the library from {repository}.
-          Anything only on this computer is removed here. A backup is saved first, in the data
+          Anything only on this {DEVICE} is removed here. A backup is saved first, in the data
           folder’s backups.
         </p>
       );
@@ -144,11 +145,11 @@ export function FirstSyncDialog({ check, repository, busy, onChoose, onClose }: 
       body = (
         <>
           <p>
-            Both this computer and {repository} have a library. Merging keeps everything from both
+            Both this {DEVICE} and {repository} have a library. Merging keeps everything from both
             and asks you about any record that differs. Nothing changes until you choose.
           </p>
           <p className="setting-hint">
-            Or download to replace this computer’s library with GitHub’s (backed up first).
+            Or download to replace this {DEVICE}’s library with GitHub’s (backed up first).
           </p>
         </>
       );
@@ -181,7 +182,7 @@ export function FirstSyncDialog({ check, repository, busy, onChoose, onClose }: 
   return (
     <Dialog
       open={check !== null}
-      title="First sync on this computer"
+      title={`First sync on this ${DEVICE}`}
       onClose={close}
       actions={actions}
     >

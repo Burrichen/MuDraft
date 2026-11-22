@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-create"
+description = "Enables the list_create command without any pre-configured scope."
+commands.allow = ["list_create"]
+
+[[permission]]
+identifier = "deny-list-create"
+description = "Denies the list_create command without any pre-configured scope."
+commands.deny = ["list_create"]

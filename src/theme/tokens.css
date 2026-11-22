@@ -123,6 +123,14 @@ body,
   margin: 0;
 }
 
+/* The app scrolls inside its own panes, never the window itself (touch scrolling would
+ * otherwise chain past the end of a pane and drag the whole interface away). */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   background: var(--bg);
   color: var(--text);

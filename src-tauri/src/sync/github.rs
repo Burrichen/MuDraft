@@ -15,7 +15,6 @@ use sha1::{Digest, Sha1};
 
 use crate::error::{AppError, AppResult};
 use crate::metadata::BoxFuture;
-use crate::metadata::http::USER_AGENT;
 
 pub const API_BASE: &str = "https://api.github.com";
 const API_VERSION: &str = "2022-11-28";
@@ -79,8 +78,7 @@ pub struct ReqwestGitHubTransport {
 
 impl ReqwestGitHubTransport {
     pub fn new() -> Result<Self, String> {
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
+        let client = crate::net::client_builder()
             .https_only(true)
             // A moved repository is reported, never followed with the token attached.
             .redirect(reqwest::redirect::Policy::none())

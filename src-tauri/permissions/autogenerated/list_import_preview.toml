@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-import-preview"
+description = "Enables the list_import_preview command without any pre-configured scope."
+commands.allow = ["list_import_preview"]
+
+[[permission]]
+identifier = "deny-list-import-preview"
+description = "Denies the list_import_preview command without any pre-configured scope."
+commands.deny = ["list_import_preview"]

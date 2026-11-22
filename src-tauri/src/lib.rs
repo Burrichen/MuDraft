@@ -11,7 +11,9 @@ pub mod domain;
 mod e2e;
 pub mod error;
 pub mod library;
+pub mod list_import;
 pub mod metadata;
+mod net;
 mod paths;
 pub mod profile;
 mod state;
@@ -22,17 +24,30 @@ use tauri::Manager;
 use crate::paths::StorageProfile;
 use crate::state::AppState;
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
     // Native E2E builds only (`--features e2e`): an embedded WebDriver server on macOS.
     #[cfg(all(feature = "e2e", target_os = "macos"))]
     let builder = builder.plugin(tauri_plugin_wdio_webdriver::init());
-    builder
-        .plugin(tauri_plugin_dialog::init())
-        // In-app updates: signed artifacts from the latest GitHub release (tauri.conf.json).
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+    // Android only: reads and writes the `content://` documents the file picker returns
+    // (used from Rust in `commands::files`; no permission is granted to the renderer).
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_fs::init());
+    // Android only: opens the APK download for an update (called from Rust only).
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_opener::init());
+    // In-app updates: signed artifacts from the latest GitHub release (tauri.conf.json).
+    // Desktop only; on Android a newer APK is installed instead.
+    #[cfg(desktop)]
+    let builder = builder
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_process::init());
+    builder
         .setup(|app| {
+            // Files staged from an earlier run's picker are never needed again.
+            commands::files::clear_staged(app.handle());
             let state = init_state(app.handle());
             let metadata =
                 commands::metadata::MetadataService::musicbrainz(state.database_path().as_deref())?;
@@ -43,6 +58,7 @@ pub fn run() {
             app.manage(metadata);
             app.manage(artwork);
             app.manage(commands::profile::ProfileImports::default());
+            app.manage(list_import::ListImporter::reqwest()?);
             app.manage(sync::SyncService::new(
                 std::sync::Arc::new(sync::github::ReqwestGitHubTransport::new()?),
                 std::sync::Arc::new(sync::secrets::OsSecretStore::new(StorageProfile::current())),
@@ -55,6 +71,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::health_check,
+            commands::app_update::app_update_check,
+            commands::app_update::app_update_open,
             commands::get_ui_preferences,
             commands::update_ui_preferences,
             commands::metadata::metadata_search,
@@ -92,6 +110,7 @@ pub fn run() {
             commands::album::edition_add,
             commands::album::edition_switch_preview,
             commands::album::edition_switch,
+            commands::album::edition_delete,
             commands::album::artwork_preference,
             commands::album::artwork_set_preference,
             commands::album::artwork_fetch,
@@ -145,6 +164,18 @@ pub fn run() {
             commands::sync::sync_check,
             commands::sync::sync_initialize,
             commands::sync::sync_now,
+            commands::lists::lists_overview,
+            commands::lists::list_detail,
+            commands::lists::list_create,
+            commands::lists::list_rename,
+            commands::lists::list_delete,
+            commands::lists::list_entries_add,
+            commands::lists::list_entry_remove,
+            commands::lists::list_import_preview,
+            commands::lists::list_entry_add_to_listen_list,
+            commands::lists::list_add_unlistened_to_listen_list,
+            commands::lists::list_entry_link,
+            commands::lists::list_review_missing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MuDraft");
