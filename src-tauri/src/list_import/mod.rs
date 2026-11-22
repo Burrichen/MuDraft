@@ -14,7 +14,6 @@ use serde::Serialize;
 use crate::error::{AppError, AppResult};
 use crate::library::lists::MAX_ENTRIES;
 use crate::metadata::BoxFuture;
-use crate::metadata::http::USER_AGENT;
 
 const ALLOWED_HOSTS: &[&str] = &["pitchfork.com", "www.pitchfork.com"];
 const MAX_PAGE_BYTES: usize = 16 * 1024 * 1024;
@@ -87,8 +86,7 @@ impl ReqwestPages {
                 && allowed_host(attempt.url());
             if ok { attempt.follow() } else { attempt.stop() }
         });
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
+        let client = crate::net::client_builder()
             .timeout(REQUEST_TIMEOUT)
             .connect_timeout(Duration::from_secs(10))
             .https_only(true)

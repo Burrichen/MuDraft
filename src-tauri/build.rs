@@ -3,6 +3,8 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "health_check",
+            "app_update_check",
+            "app_update_open",
             "get_ui_preferences",
             "update_ui_preferences",
             "metadata_search",

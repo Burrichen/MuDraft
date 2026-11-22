@@ -7,6 +7,8 @@ import { listen } from "@tauri-apps/api/event";
  */
 export type NativeCommand =
   | "health_check"
+  | "app_update_check"
+  | "app_update_open"
   | "get_ui_preferences"
   | "update_ui_preferences"
   | "metadata_search"

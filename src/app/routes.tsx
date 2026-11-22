@@ -10,6 +10,7 @@ import { ListenListPage } from "../features/listen-list/ListenListPage";
 import { NextUpPage } from "../features/next-up/NextUpPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { StatsPage } from "../features/stats/StatsPage";
+import { STATS_ENABLED } from "./platform";
 import { Shell } from "./Shell";
 
 export const routes: RouteObject[] = [
@@ -25,7 +26,7 @@ export const routes: RouteObject[] = [
       { path: "lists", element: <ListsPage /> },
       { path: "lists/:listId", element: <ListPage /> },
       { path: "liked", element: <LikedPage /> },
-      { path: "stats", element: <StatsPage /> },
+      ...(STATS_ENABLED ? [{ path: "stats", element: <StatsPage /> }] : []),
       { path: "settings", element: <SettingsPage /> },
       { path: "albums/:albumId", element: <AlbumPage /> },
       { path: "artists/:artistId", element: <ArtistPage /> },

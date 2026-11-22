@@ -41,8 +41,7 @@ pub struct ReqwestTransport {
 
 impl ReqwestTransport {
     pub fn new() -> Result<Self, String> {
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
+        let client = crate::net::client_builder()
             .timeout(REQUEST_TIMEOUT)
             .connect_timeout(CONNECT_TIMEOUT)
             .https_only(true)

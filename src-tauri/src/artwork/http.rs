@@ -6,7 +6,6 @@ use std::time::Duration;
 use reqwest::Url;
 
 use crate::metadata::BoxFuture;
-use crate::metadata::http::USER_AGENT;
 
 pub const MAX_IMAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
@@ -63,8 +62,7 @@ impl ReqwestImageTransport {
                 Err(e) => attempt.error(e),
             }
         });
-        let client = reqwest::Client::builder()
-            .user_agent(USER_AGENT)
+        let client = crate::net::client_builder()
             .redirect(policy)
             .https_only(true)
             .timeout(Duration::from_secs(20))

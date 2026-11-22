@@ -439,9 +439,93 @@ jobs:
           path: verify-shots/
           if-no-files-found: ignore
 
+  # The Android APK. It is built only when the signing key secrets exist: an APK signed with
+  # a different key can't update an installed one, so an unsigned or throwaway-signed APK is
+  # never published. Secrets: ANDROID_KEYSTORE_BASE64 (a .jks/.keystore, base64),
+  # ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (docs/ANDROID.md).
+  android:
+    name: Android APK
+    needs: [meta, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      built: ${{ steps.keystore.outputs.present }}
+    env:
+      KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+    steps:
+      - name: Skip unless the signing key is configured
+        id: keystore
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::notice::Android APK skipped: add the ANDROID_KEYSTORE_* secrets (docs/ANDROID.md)."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.keystore.outputs.present == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: steps.keystore.outputs.present == 'true'
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install pinned Rust toolchain and the Android targets
+        if: steps.keystore.outputs.present == 'true'
+        run: |
+          rustup toolchain install
+          rustup target add aarch64-linux-android armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        if: steps.keystore.outputs.present == 'true'
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+        if: steps.keystore.outputs.present == 'true'
+
+      - name: Write the signing configuration
+        if: steps.keystore.outputs.present == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd src-tauri/gen/android
+          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEY_PASSWORD"
+          } > keystore.properties
+
+      - name: Build and verify the signed APK
+        if: steps.keystore.outputs.present == 'true'
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64" NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          npm run android:build -- --target aarch64 armv7
+          apk=$(ls src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk)
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$apk"
+          mkdir android
+          cp "$apk" "android/MuDraft_${VERSION}_android.apk"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: steps.keystore.outputs.present == 'true'
+        with:
+          name: MuDraft-android
+          path: android/*.apk
+          if-no-files-found: error
+
   release:
     name: Draft GitHub release (both platforms)
-    needs: [meta, test, live-sync, windows, macos, macos-verify]
+    needs: [meta, test, live-sync, windows, macos, macos-verify, android]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -459,6 +543,13 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: MuDraft-macos-universal
+          path: release
+
+      # Present only when the Android signing key is configured.
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: needs.android.outputs.built == 'true'
+        with:
+          name: MuDraft-android
           path: release
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -498,13 +589,19 @@ jobs:
       - name: Check assets and write checksums
         env:
           VERSION: ${{ needs.meta.outputs.version }}
+          ANDROID_BUILT: ${{ needs.android.outputs.built }}
         run: |
           cd release
           ls -l
           test -f "MuDraft_${VERSION}_windows_x64_setup.exe"
           test -f "MuDraft_${VERSION}_macos_universal.dmg"
-          test "$(ls | wc -l)" -eq 2
-          sha256sum "MuDraft_${VERSION}_windows_x64_setup.exe" "MuDraft_${VERSION}_macos_universal.dmg" > SHA256SUMS.txt
+          expected=2
+          if [ "${ANDROID_BUILT}" = true ]; then
+            test -f "MuDraft_${VERSION}_android.apk"
+            expected=3
+          fi
+          test "$(ls | wc -l)" -eq "$expected"
+          sha256sum MuDraft_* > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Write release notes
@@ -527,6 +624,7 @@ jobs:
               case $file in
                 *windows*) platform="Windows 10/11 x64 installer" ;;
                 *macos*) platform="macOS 12+ disk image, Apple Silicon and Intel" ;;
+                *android*) platform="Android 7+ APK (64-bit and 32-bit ARM); install over a previous MuDraft APK to update" ;;
               esac
               echo "| \`$file\` | $platform | \`$sum\` |"
             done < release/SHA256SUMS.txt
