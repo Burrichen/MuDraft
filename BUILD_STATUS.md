@@ -15,7 +15,7 @@
 ## Notes
 
 - Run `npm test` from PowerShell, not Git Bash. Build Rust with `CARGO_BUILD_JOBS=2`.
-- The Android signing key is in `~/.mudraft-android/` (not in git). Back it up: a lost key means installed APKs can't be updated.
+- The Android signing key is in `~/.mudraft-android/` (not in git). Back it up; without it installed APKs can't update.
 
 ## Blockers
 

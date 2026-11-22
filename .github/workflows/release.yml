@@ -512,7 +512,8 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_21_X64" NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           npm run android:build -- --target aarch64 armv7
           apk=$(ls src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk)
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$apk"
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)
+          "$apksigner" verify --print-certs "$apk"
           mkdir android
           cp "$apk" "android/MuDraft_${VERSION}_android.apk"
 
